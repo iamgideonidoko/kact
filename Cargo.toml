@@ -2,5 +2,16 @@
 name = "kact"
 version = "0.0.1"
 edition = "2024"
+authors = ["Gideon Idoko"]
+description = "Keyboard-driven cursor actuator"
+license = "MIT"
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
