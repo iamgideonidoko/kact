@@ -45,3 +45,22 @@ impl Vector2D {
     }
   }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Direction {
+  Up,
+  Down,
+  Left,
+  Right,
+}
+
+impl Direction {
+  pub fn to_vector(&self) -> Vector2D {
+    match self {
+      Direction::Up => Vector2D::new(0.0, -1.0),
+      Direction::Down => Vector2D::new(0.0, 1.0),
+      Direction::Left => Vector2D::new(-1.0, 0.0),
+      Direction::Right => Vector2D::new(1.0, 0.0),
+    }
+  }
+}
