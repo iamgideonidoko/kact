@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
+use tracing_subscriber;
 
 #[derive(Parser, Debug)]
 #[command(name = "kact")]
@@ -21,6 +22,21 @@ struct Cli {
 
 fn main() -> Result<()> {
   let cli = Cli::parse();
-  println!("options: {:?}", cli);
+
+  // Initialize logging
+  let log_level = match cli.log_level.as_str() {
+    "error" => tracing::Level::ERROR,
+    "warn" => tracing::Level::WARN,
+    "info" => tracing::Level::INFO,
+    "debug" => tracing::Level::DEBUG,
+    "trace" => tracing::Level::TRACE,
+    _ => tracing::Level::INFO,
+  };
+
+  tracing_subscriber::fmt()
+    .with_max_level(log_level)
+    .with_target(false)
+    .init();
+
   Ok(())
 }
