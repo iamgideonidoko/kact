@@ -38,5 +38,23 @@ fn main() -> Result<()> {
     .with_target(false)
     .init();
 
+  // Generate config if requested
+  if cli.generate_config {
+    generate_default_config(&cli.config)?;
+    return Ok(());
+  }
+
+  // Load configuration
+  let _config = Config::load_or_default(&cli.config);
+  tracing::info!("Configuration loaded from {:?}", cli.config);
+
+  Ok(())
+}
+
+fn generate_default_config(path: &PathBuf) -> Result<()> {
+  let config = Config::default();
+  let toml_str = toml::to_string_pretty(&config)?;
+  std::fs::write(path, toml_str)?;
+  println!("Generated default configuration at {:?}", path);
   Ok(())
 }

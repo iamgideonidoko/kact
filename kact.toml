@@ -1,0 +1,49 @@
+# Kact Configuration File
+# Keyboard-driven cursor actuator
+
+[motion]
+# Acceleration curve type: "sigmoid", "exponential", "linear"
+curve_type = "sigmoid"
+
+# Maximum pixels per second
+max_speed = 2000.0
+
+# Acceleration factor (0.0-1.0)
+# Higher = faster response to input
+acceleration = 0.8
+
+# Friction coefficient (0.0-1.0)  
+# Higher = less deceleration when input stops
+friction = 0.95
+
+# Target frames per second for motion engine
+target_fps = 144
+
+[keybindings]
+# Movement keys
+move_up = "w"
+move_down = "s"
+move_left = "a"
+move_right = "d"
+
+# Mode switching
+mode_normal = "1"
+mode_precise = "2"
+mode_fast = "3"
+
+# Control keys
+toggle_active = "space"
+emergency_stop = "escape"
+
+[modes]
+# Speed multipliers for different precision modes
+normal_multiplier = 1.0
+precise_multiplier = 0.3
+fast_multiplier = 2.5
+
+[system]
+# Enable hot-reload of this config file
+hot_reload = true
+
+# Log level: "error", "warn", "info", "debug", "trace"
+log_level = "info"
