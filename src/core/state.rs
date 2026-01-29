@@ -46,3 +46,39 @@ impl InputState {
     result.normalize()
   }
 }
+
+#[derive(Debug, Clone)]
+pub struct AppState {
+  pub active: bool,
+  pub emergency_stop: bool,
+  pub input: InputState,
+  pub velocity: Vector2D,
+  pub position: Vector2D,
+}
+
+impl Default for AppState {
+  fn default() -> Self {
+    Self {
+      active: false,
+      emergency_stop: false,
+      input: InputState::new(),
+      velocity: Vector2D::zero(),
+      position: Vector2D::zero(),
+    }
+  }
+}
+
+impl AppState {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn toggle_active(&mut self) {
+    self.active = !self.active;
+  }
+
+  pub fn trigger_emergency_stop(&mut self) {
+    self.emergency_stop = true;
+    self.active = false;
+  }
+}
