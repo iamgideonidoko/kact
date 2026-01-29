@@ -7,6 +7,9 @@ pub enum Error {
 
   #[error("TOML parse error: {0}")]
   TomlParse(#[from] toml::de::Error),
+
+  #[error("Platform error: {0}")]
+  Platform(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
