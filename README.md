@@ -1,153 +1,190 @@
 # Kact
 
-A keyboard-driven cursor controller written in Rust. The goal is fast cursor navigation through configurable shortcuts, labeled targets, and shell commands.
+Control the cursor from your keyboard or shell. Written in Rust, with native macOS overlays and a local command service.
 
-## Status
+- Grid labels and accessibility element labels jump directly to targets.
+- Freestyle mode provides movement without an overlay.
+- Click, double/triple-click, drag, scroll, and jump to screen edges or corners.
+- Multiple displays, configurable appearance, system/Emacs/vi controls, and a menu bar.
+- TOML configuration with validation and automatic reload.
+- Global shortcuts are **disabled by default**. External shortcut tools can invoke every action through the CLI.
 
-Early prototype. Directional movement, three speed modes, TOML loading, and partial configuration reload are implemented. macOS Core Graphics and Linux X11 backends exist; neither is production-ready. Native Wayland and Windows are not implemented.
+macOS is the primary platform. Linux X11 supports shell-driven mouse actions; native overlays, element discovery, keyboard capture, and modified clicks are not available there. Native Wayland and Windows are unsupported.
 
-Grid navigation, UI element targeting, clicking, dragging, scrolling, and command control of a running instance are planned.
+## Quick start
 
-## Run
-
-Install a Rust toolchain supporting edition 2024. On Linux, install X11 development libraries first:
-
-```sh
-sudo apt-get install libx11-dev libxtst-dev
-```
-
-Build and run from the repository:
+Install Rust 1.88 or newer:
 
 ```sh
-cargo build --release
-./target/release/kact --config kact.toml
+cargo install --path .
+kact start
+kact activate grid
 ```
 
-On macOS, enable Accessibility permission for the app or terminal running Kact in System Settings → Privacy & Security → Accessibility, then restart. If input capture fails, inspect the logs. On Linux, use an X11 session with a valid `DISPLAY`; system-wide control under Wayland is not supported.
+Grant **Accessibility** permission when prompted in System Settings → Privacy & Security, then retry `kact start`. If keyboard capture is denied, check Input Monitoring too. `kact doctor` checks configuration, permission, and service availability without moving the cursor.
 
-Available options:
+`start` creates a default user config if needed and launches one background instance. It is safe to repeat. Logs are saved beside the config as `kact.log`. Use `kact daemon` for foreground logs or `kact quit` to stop.
+
+For a menu-bar app (Python 3.11+):
 
 ```sh
-kact --config /path/to/kact.toml
-kact --log-level debug
-kact --generate-config --config /path/to/new-config.toml
+python3 scripts/bundle_macos.py
 ```
 
-Use the built binary path unless Kact is installed on `PATH`. Config generation overwrites the destination. Optional local installation: `cargo install --path .`.
+Move `target/Kact.app` to Applications and open it. The script signs locally by default; set `KACT_SIGN_IDENTITY` for Developer ID signing. Distribution still requires notarization. The bundled CLI is `Kact.app/Contents/MacOS/kact`; add a symlink to it on `PATH` if needed. Keep the executable at a stable path so its permission and login-startup entries remain valid.
 
-### Current controls
+```sh
+kact service install      # enable startup at the next login
+kact service uninstall    # remove login startup and unload the managed service
+```
 
-Kact starts inactive.
+Linux X11 builds need `libx11-dev` and `libxtst-dev`. Set `keybindings.navigation_enabled = false` when using freestyle commands there.
+
+## Commands
+
+```sh
+kact activate grid         # labeled cells on every screen
+kact activate elements     # targets in the focused window; grid fallback
+kact activate freestyle    # movement controls without an overlay
+kact toggle grid
+kact deactivate
+kact cancel                # clear a label prefix, otherwise deactivate
+
+kact move --dx 20 --dy -10
+kact move-to --x 800 --y 400
+kact move-start right      # continuous movement; pair with release below
+kact move-stop right
+kact speed precise        # normal | precise | fast
+kact stop                  # stop motion and release held mouse buttons
+kact jump center          # top | bottom | left | right | center | cycle
+
+kact click
+kact click --button right
+kact click --count 2 --modifiers cmd
+kact button-down           # begin dragging
+kact move --dx 100
+kact button-up             # release the drag
+kact scroll --dy 80        # positive: up; negative: down
+kact scroll --dx -80       # positive: left; negative: right
+
+kact select aa             # enter a displayed label through the CLI
+kact backspace
+kact refine                # subdivide the last selected grid cell
+kact show grid-lines       # toggle grid lines
+kact show labels           # toggle labels
+kact show larger           # larger cells; also: smaller
+kact show more-contrast    # also: less-contrast
+kact reload
+kact status
+kact quit
+```
+
+Clicking exits navigation. Clicking a held button drops it without an extra click. Deactivation, shutdown, and fatal input failures release held buttons. `stop` leaves an existing navigation overlay active; `deactivate` also hides it.
+
+Commands return JSON and a nonzero exit status on failure. Continuous movement commands do not activate keyboard capture. Send press/release commands in order; the Hammerspoon example serializes them. `scroll` uses pixels on macOS and wheel steps on X11. Coordinates use screen points on macOS, with `(0, 0)` at the primary display's top-left; other displays may have negative coordinates.
+
+All commands accept `--config PATH` and `--socket PATH`; these identify the daemon's configuration at startup and its private socket respectively. Use the same `--socket` for clients of a custom instance. `--config` on a client does not switch a running daemon's config. Socket parent directories must be owned by you with mode `0700`.
+
+## Keyboard behavior
+
+Normal typing is untouched while navigation is inactive. Explicit activation enables local navigation controls by default; only handled keys are consumed.
 
 | Key | Action |
 | --- | --- |
-| Space | Toggle cursor control |
-| W/A/S/D | Move up/left/down/right |
-| 1 / 2 / 3 | Normal / precise / fast speed |
-| Escape | Trigger emergency stop |
+| Displayed label | Jump to the target |
+| Escape / Cmd+. / Ctrl+G | Clear prefix, then exit on the next press |
+| Backspace | Remove one prefix character |
+| Cmd+H | Hide navigation |
+| Arrows / Alt+arrows | Move 10 / 100 points |
+| Cmd+arrows | Jump to screen edges |
+| Ctrl+L | Center, then cycle through corners |
+| Enter | Click or drop a drag |
+| `=` / `\` | Begin drag / double-click |
+| `[` / `]` | Middle / right click |
+| Shift+arrows | Scroll |
+| Modifier+Enter | Click with those modifiers |
+| Ctrl+= / Ctrl+Shift+= | Toggle grid lines / labels |
+| Cmd+Shift+= / Cmd+Shift+- | Increase / decrease cell size |
+| Cmd+= / Cmd+- | Increase / decrease contrast |
 
-These keys are currently hardcoded and monitored globally. On macOS, they also reach the focused app; holding Space can toggle repeatedly. Escape stops movement, but clean process shutdown is incomplete. Ctrl+C terminates the process without coordinated cleanup.
+System controls include Emacs movement shortcuts. Set `keybindings.preset = "vi"` for H/J/K/L movement, Ctrl+H/J/K/L larger steps, Shift+H/J/K/L edges, Shift+M center/corners, and Ctrl+B/F/I/A scrolling. Keys reserved by local bindings are removed from the label alphabet so targets remain reachable.
 
 ## Configuration
 
-The default path is `kact.toml` in the working directory. See the [complete sample](kact.toml) for all required fields; partial configs are not supported yet. Missing or malformed files fall back to defaults.
+```sh
+kact config path
+kact config init           # creates defaults; never overwrites an existing file
+kact config check
+```
+
+Default: `$XDG_CONFIG_HOME/kact/kact.toml`, otherwise `~/.config/kact/kact.toml`. Omitted fields use defaults. Unknown fields, invalid values, conflicting aliases, and invalid binding actions are rejected. See [kact.toml](kact.toml) for the full schema.
+
+Optional global shortcuts:
 
 ```toml
-[motion]
-curve_type = "sigmoid" # sigmoid | exponential | linear
-max_speed = 2000.0    # pixels per second before the mode multiplier
-acceleration = 0.8    # response factor, intended range 0–1
-friction = 0.95       # velocity retained per tick without input
-target_fps = 144
+[keybindings]
+enabled = true
+navigation_enabled = true
+preset = "system"
+
+[keybindings.global]
+"ctrl+alt+g" = "activate grid"
+"ctrl+alt+e" = "activate elements"
+"ctrl+alt+f" = "toggle freestyle"
+
+[keybindings.local]
+"tab" = "refine"
 ```
 
-Edit the existing `[motion]` section rather than replacing the whole file with this excerpt. Higher acceleration responds faster; higher friction retains more movement after release. Lower `max_speed` for slower movement or `target_fps` for fewer updates.
+Global shortcuts require modifiers. Binding values are Kact actions, never shell programs. Custom local bindings override the selected preset. For completely command-only use:
 
-Current limitations:
-
-- `[keybindings]` and `[modes]` are parsed but ignored; speed multipliers remain 1.0, 0.3, and 2.5.
-- Logging uses `--log-level`, not `[system].log_level`.
-- `[system].hot_reload` enables watching at startup. Motion settings reload, except `target_fps`, which requires a restart. Changing the watcher setting also requires a restart.
-- Values are not validated. Keep `target_fps` positive, speed finite and positive, and acceleration/friction within 0–1.
-- Invalid reloads retain the previous config. File replacement by editors may disrupt watching.
-
-## Implementation
-
-The core separates input state and motion calculations from OS calls:
-
-```text
-OS keyboard events -> input state -> motion tick -> OS cursor movement
+```toml
+[keybindings]
+enabled = false
+navigation_enabled = false
 ```
 
-- `src/core/`: direction vectors, activation/speed state, and pure velocity/position calculations.
-- `src/platform/`: input and cursor traits, macOS event taps, and Linux XRecord/XTest integration.
-- `src/runtime/`: input forwarding, motion loop, configuration watching, and coordination.
-- `src/config.rs`: TOML schema and loading; `src/main.rs`: CLI and startup.
+Movement settings control speed, acceleration, friction, frame rate, and normal/precise/fast multipliers. Navigation settings control rows, columns, label alphabet, and optional automatic clicking after selection. Appearance settings control font size, foreground/background/highlight colors, opacity, and grid lines.
 
-Bounded channels carry input and control messages; shared state uses a mutex. Platform input capture and configuration watching add worker threads beyond the input and motion threads.
+Valid reloads apply atomically and exit navigation to clear held input. Invalid reloads retain the previous configuration. Atomic editor saves are supported. Logging changes reload too, unless overridden by `--log-level`. When automatic reload is disabled, use `kact reload` to apply changes.
 
-The motion engine normalizes directional input and interpolates toward a target velocity. Curves currently operate on normalized input magnitude, not elapsed hold time; friction depends on tick rate. Worker failures and shutdown need coordinated handling. Latency, CPU, and memory targets have not been established by benchmarks.
+## External integrations
 
-## Roadmap
+Run `kact start` once, then let your shortcut tool invoke the CLI:
 
-The finished product should let a user activate Kact from a shortcut or command, select a screen location or UI element, move/click/drag/scroll, and return to normal typing. Configuration should cover bindings, movement, navigation, and overlay appearance without rebuilding.
+- [Hammerspoon](examples/hammerspoon.lua): activation shortcuts and ordered continuous-movement press/release commands using [hs.task](https://www.hammerspoon.org/docs/hs.task.html).
+- [Karabiner-Elements](examples/karabiner.json): import a complex modification using [shell commands](https://karabiner-elements.pqrs.org/docs/json/complex-modifications-manipulator-definition/to/shell-command/).
+- [Kanata](examples/kanata.kbd): adapt the binary path and merge the bindings. Requires a build with [command support](https://jtroo.github.io/config.html#_cmd) and `danger-enable-cmd yes`.
 
-### 1. Reliable macOS foundation
+Use an absolute executable path; GUI tools may have a different `PATH`. Run commands as the desktop user. Keep Kact's global shortcuts disabled when another tool owns them. Templates have not been exercised inside those third-party apps.
 
-- [ ] Use a deliberate activation shortcut; suppress handled keys only while active and ignore repeat events for toggles.
-- [ ] Make cancellation immediate; clear held input on exit and recover safely from dropped events or disabled event taps.
-- [ ] Propagate permission and worker failures; stop and join workers on Escape, Ctrl+C, and SIGTERM.
-- [ ] Make movement timing consistent across frame rates and verify cursor coordinates across displays.
-
-Done when activation, movement, cancellation, and shutdown work without interfering with ordinary typing.
-
-### 2. Configuration and command control
-
-- [ ] Apply configured bindings and speed multipliers; support modifier combinations and reject conflicting bindings.
-- [ ] Add defaults for omitted fields, numeric validation, unknown-field errors, and useful error messages.
-- [ ] Use a predictable user config location with `--config` override; reload valid changes atomically and retain the last valid config on failure.
-- [ ] Run one background instance with a local control socket; route shortcuts and CLI requests through the same actions.
-- [ ] Add commands for activation, deactivation, toggling, status, and reload; report when no instance is running.
-
-Done when users can configure Kact and control it from a shell or external shortcut manager without launching duplicate instances.
-
-### 3. Complete cursor workflow
-
-- [ ] Add a labeled grid overlay with prefix selection, cancellation, and refinement for precise targets.
-- [ ] Support left/right/middle click, double-click, drag/drop, and horizontal/vertical scrolling; release held buttons on cancellation or shutdown.
-- [ ] Support multiple displays, display scaling, Spaces, and fullscreen apps.
-- [ ] Show active mode and configurable, readable labels without stealing the destination app's focus unnecessarily.
-
-Done when a user can select a target, perform a mouse action, and resume typing entirely from the keyboard.
-
-### 4. UI element navigation
-
-- [ ] Discover actionable elements in the focused window through macOS Accessibility APIs.
-- [ ] Label targets, filter by typed prefix, and activate or move to the selection.
-- [ ] Handle slow or inaccessible apps with cancellation and a grid fallback.
-
-Done when element navigation and grid navigation share consistent controls and work together reliably.
-
-### 5. Release readiness
-
-- [ ] Cover config/reload, input transitions, motion timing, command control, and shutdown with regression tests.
-- [ ] Verify real macOS workflows, including permission denial, multiple displays, and fullscreen apps.
-- [ ] Add CI, measure idle/active resource use and end-to-end latency, and publish results.
-- [ ] Package signed/notarized macOS releases with installation, startup, upgrade, and uninstall instructions.
-- [ ] Validate and harden Linux X11 support before claiming support; scope native Wayland and Windows separately.
-
-Per-app profiles, macros, and a configuration GUI come after the core workflow is reliable.
-
-## Development
+## Development and release checks
 
 ```sh
-cargo test
-cargo check
-cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo build --locked --release
+python3 scripts/smoke_macos.py target/debug/kact
+python3 scripts/smoke_mouse_macos.py target/debug/kact
 ```
 
-Existing tests cover default config values, basic motion, and vector operations. They do not verify OS input capture or cursor interaction.
+The first native smoke check briefly shows overlays and starts keyboard capture without moving or clicking. The second opens a temporary test window, checks real mouse actions and keyboard suppression, then restores the cursor. Both require a macOS desktop and Accessibility permission; the second also requires the Xcode command-line tools.
+
+`src/core/` contains pure motion and label logic. `src/platform/` handles input and mouse injection. `src/desktop/` owns main-thread AppKit overlays and Accessibility discovery. `src/runtime/` applies shared actions from the CLI, menu, and optional bindings. `src/ipc.rs` provides a private, bounded Unix socket transport with single-instance locking.
+
+Automated tests cover config validation, movement timing, labels, state transitions, drag release, shortcut suppression, IPC framing/locking, and atomic reload. Native smoke checks cover grid/element presentation, keyboard suppression/passthrough, real clicks/drag/scroll, reload, and clean shutdown. CI is configured for macOS and Linux; Linux desktop behavior still needs verification.
+
+Remaining release gates:
+
+- [ ] Exercise real clicking, dragging, scrolling, remappers, keyboard layouts, Spaces, fullscreen apps, and mixed-scale display changes across supported macOS versions.
+- [ ] Test permission revocation, sleep/wake, secure input, and long-running sessions.
+- [ ] Benchmark end-to-end latency and idle/active resource use; publish measured results.
+- [ ] Distribute Developer ID signed, notarized releases with upgrade verification.
+- [ ] Replace legacy Cocoa bindings before their transitive `block` dependency becomes incompatible with Rust.
+- [ ] Validate X11 behavior separately; native Wayland and Windows need dedicated implementations.
+
+Per-app profiles, macros, and a graphical config editor are later extensions.
 
 ## License
 

@@ -1,0 +1,15 @@
+{
+  "title": "Kact navigation",
+  "rules": [
+    {
+      "description": "Control-Option-G activates Kact grid",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": { "key_code": "g", "modifiers": { "mandatory": ["control", "option"] } },
+          "to": [ { "shell_command": "\"$HOME/.cargo/bin/kact\" activate grid" } ]
+        }
+      ]
+    }
+  ]
+}

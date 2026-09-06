@@ -1,0 +1,8 @@
+;; Merge into your config; change the absolute path to your installed Kact binary.
+;; Requires a Kanata build with cmd support. Run commands as the desktop user.
+(defcfg danger-enable-cmd yes)
+(defsrc f18 f19 f20)
+(deflayer base
+  (cmd /Users/YOU/.cargo/bin/kact activate grid)
+  (cmd /Users/YOU/.cargo/bin/kact activate elements)
+  (cmd /Users/YOU/.cargo/bin/kact deactivate))
