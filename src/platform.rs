@@ -107,7 +107,7 @@ pub trait InputListener: Send {
   fn next_event(&mut self) -> Result<Option<KeyEvent>>;
   fn stop(&mut self) -> Result<()>;
 }
-pub trait CursorActuator: Send {
+pub trait CursorActuator {
   fn move_relative(&mut self, delta: Vector2D) -> Result<()>;
   fn move_absolute(&mut self, position: Vector2D) -> Result<()>;
   fn get_position(&self) -> Result<Vector2D>;

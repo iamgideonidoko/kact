@@ -12,8 +12,6 @@ pub struct LinuxCursorActuator {
   held: Vec<MouseButton>,
   remainder: Vector2D,
 }
-// The connection is owned by this actuator and accessed on one runtime thread.
-unsafe impl Send for LinuxCursorActuator {}
 impl LinuxCursorActuator {
   pub fn new() -> Result<Self> {
     if std::env::var_os("WAYLAND_DISPLAY").is_some() {
