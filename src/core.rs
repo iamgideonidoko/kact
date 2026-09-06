@@ -1,4 +1,5 @@
 pub mod motion;
+pub mod navigation;
 pub mod state;
 pub mod types;
 

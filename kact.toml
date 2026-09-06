@@ -1,49 +1,43 @@
-# Kact Configuration File
-# Keyboard-driven cursor actuator
-
+# Run `kact config init` to create your user configuration.
 [motion]
-# Acceleration curve type: "sigmoid", "exponential", "linear"
 curve_type = "sigmoid"
-
-# Maximum pixels per second
 max_speed = 2000.0
-
-# Acceleration factor (0.0-1.0)
-# Higher = faster response to input
 acceleration = 0.8
-
-# Friction coefficient (0.0-1.0)  
-# Higher = less deceleration when input stops
+# Fraction of velocity retained per 1/60 second after release.
 friction = 0.95
-
-# Target frames per second for motion engine
 target_fps = 144
 
-[keybindings]
-# Movement keys
-move_up = "w"
-move_down = "s"
-move_left = "a"
-move_right = "d"
-
-# Mode switching
-mode_normal = "1"
-mode_precise = "2"
-mode_fast = "3"
-
-# Control keys
-toggle_active = "space"
-emergency_stop = "escape"
-
 [modes]
-# Speed multipliers for different precision modes
 normal_multiplier = 1.0
 precise_multiplier = 0.3
 fast_multiplier = 2.5
 
-[system]
-# Enable hot-reload of this config file
-hot_reload = true
+[keybindings]
+# No global shortcuts are installed by default.
+enabled = false
+# Keys are captured only during explicitly activated navigation.
+navigation_enabled = true
+preset = "system"
 
-# Log level: "error", "warn", "info", "debug", "trace"
+[keybindings.global]
+# "ctrl+alt+g" = "activate grid"
+
+[keybindings.local]
+
+[navigation]
+rows = 12
+columns = 20
+alphabet = "asdfghjklqwertyuiopzxcvbnm"
+auto_click = false
+
+[appearance]
+font_size = 14.0
+foreground = "#FFFFFF"
+background = "#17212B"
+highlight = "#FFD166"
+opacity = 0.85
+grid_lines = true
+
+[system]
+hot_reload = true
 log_level = "info"

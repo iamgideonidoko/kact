@@ -5,3 +5,6 @@ pub mod platform;
 pub mod runtime;
 
 pub use error::{Error, Result};
+pub mod command;
+pub mod desktop;
+pub mod ipc;

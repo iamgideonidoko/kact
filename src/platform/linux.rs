@@ -1,391 +1,182 @@
-use super::{CursorActuator, InputEvent, InputListener};
-use crate::core::state::Mode;
-use crate::core::types::{Direction, Vector2D};
+use super::{CursorActuator, InputListener, InputOptions, MouseButton};
+use crate::core::types::Vector2D;
 use crate::{Error, Result};
-use crossbeam_channel::{Receiver, Sender, bounded};
-use std::thread;
-use std::time::Duration;
+use x11::{xlib, xtest};
 
-#[cfg(target_os = "linux")]
-use x11::xlib;
-#[cfg(target_os = "linux")]
-use x11::xrecord;
-#[cfg(target_os = "linux")]
-use x11::xtest;
-
-// X11 keysyms (from /usr/include/X11/keysymdef.h)
-#[cfg(target_os = "linux")]
-const XK_W: u32 = 0x0077;
-#[cfg(target_os = "linux")]
-const XK_A: u32 = 0x0061;
-#[cfg(target_os = "linux")]
-const XK_S: u32 = 0x0073;
-#[cfg(target_os = "linux")]
-const XK_D: u32 = 0x0064;
-#[cfg(target_os = "linux")]
-const XK_1: u32 = 0x0031;
-#[cfg(target_os = "linux")]
-const XK_2: u32 = 0x0032;
-#[cfg(target_os = "linux")]
-const XK_3: u32 = 0x0033;
-#[cfg(target_os = "linux")]
-const XK_SPACE: u32 = 0x0020;
-#[cfg(target_os = "linux")]
-const XK_ESCAPE: u32 = 0xff1b;
-
-pub struct LinuxInputListener {
-  event_rx: Receiver<InputEvent>,
-  running: bool,
-  #[cfg(target_os = "linux")]
-  record_thread: Option<thread::JoinHandle<()>>,
-}
-
-impl LinuxInputListener {
-  pub fn new() -> Result<Self> {
-    let (_, rx) = bounded::<InputEvent>(100);
-
-    Ok(Self {
-      event_rx: rx,
-      running: false,
-      #[cfg(target_os = "linux")]
-      record_thread: None,
-    })
-  }
-
-  #[cfg(target_os = "linux")]
-  fn map_keysym_to_event(keysym: u32, is_press: bool) -> Option<InputEvent> {
-    match keysym {
-      XK_W => Some(if is_press {
-        InputEvent::DirectionPressed(Direction::Up)
-      } else {
-        InputEvent::DirectionReleased(Direction::Up)
-      }),
-      XK_S => Some(if is_press {
-        InputEvent::DirectionPressed(Direction::Down)
-      } else {
-        InputEvent::DirectionReleased(Direction::Down)
-      }),
-      XK_A => Some(if is_press {
-        InputEvent::DirectionPressed(Direction::Left)
-      } else {
-        InputEvent::DirectionReleased(Direction::Left)
-      }),
-      XK_D => Some(if is_press {
-        InputEvent::DirectionPressed(Direction::Right)
-      } else {
-        InputEvent::DirectionReleased(Direction::Right)
-      }),
-      XK_1 if is_press => Some(InputEvent::ModeChanged(Mode::Normal)),
-      XK_2 if is_press => Some(InputEvent::ModeChanged(Mode::Precise)),
-      XK_3 if is_press => Some(InputEvent::ModeChanged(Mode::Fast)),
-      XK_SPACE if is_press => Some(InputEvent::ToggleActive),
-      XK_ESCAPE if is_press => Some(InputEvent::EmergencyStop),
-      _ => None,
-    }
-  }
-}
-
-impl InputListener for LinuxInputListener {
-  fn start(&mut self) -> Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-      let (tx, rx) = bounded::<InputEvent>(100);
-      self.event_rx = rx;
-      self.running = true;
-
-      // Spawn thread for XRecord
-      let handle = thread::spawn(move || {
-        if let Err(e) = run_xrecord(tx) {
-          tracing::error!("XRecord failed: {}", e);
-        }
-      });
-
-      self.record_thread = Some(handle);
-      tracing::info!("Linux input listener started with XRecord");
-      tracing::info!("Note: May require X11 input permissions");
-      
-      return Ok(());
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-      self.running = true;
-      tracing::warn!("Linux input listener running in stub mode (not on Linux)");
-      Ok(())
-    }
-  }
-
-  fn next_event(&mut self) -> Result<Option<InputEvent>> {
-    if !self.running {
-      return Ok(None);
-    }
-
-    match self.event_rx.recv_timeout(Duration::from_millis(10)) {
-      Ok(event) => Ok(Some(event)),
-      Err(crossbeam_channel::RecvTimeoutError::Timeout) => Ok(None),
-      Err(crossbeam_channel::RecvTimeoutError::Disconnected) => Ok(None),
-    }
-  }
-
-  fn stop(&mut self) -> Result<()> {
-    self.running = false;
-    // Note: record_thread will be terminated when XRecord context is disabled
-    Ok(())
-  }
-}
-
-#[cfg(target_os = "linux")]
-fn run_xrecord(tx: Sender<InputEvent>) -> Result<()> {
-  unsafe {
-    // Open display connections
-    let data_display = xlib::XOpenDisplay(std::ptr::null());
-    if data_display.is_null() {
-      return Err(Error::Platform(
-        "Failed to open X11 display for data".to_string(),
-      ));
-    }
-
-    let ctrl_display = xlib::XOpenDisplay(std::ptr::null());
-    if ctrl_display.is_null() {
-      xlib::XCloseDisplay(data_display);
-      return Err(Error::Platform(
-        "Failed to open X11 display for control".to_string(),
-      ));
-    }
-
-    // Set up XRecord range for key events
-    let mut range = xrecord::XRecordAllocRange();
-    if range.is_null() {
-      xlib::XCloseDisplay(data_display);
-      xlib::XCloseDisplay(ctrl_display);
-      return Err(Error::Platform("Failed to allocate XRecord range".to_string()));
-    }
-
-    (*range).device_events.first = xlib::KeyPress as u8;
-    (*range).device_events.last = xlib::KeyRelease as u8;
-
-    // Create XRecord context
-    let mut clients = xrecord::XRecordAllClients;
-    let context = xrecord::XRecordCreateContext(
-      ctrl_display,
-      0,
-      &mut clients,
-      1,
-      &mut range as *mut *mut xrecord::XRecordRange,
-      1,
-    );
-
-    if context == 0 {
-      xlib::XCloseDisplay(data_display);
-      xlib::XCloseDisplay(ctrl_display);
-      return Err(Error::Platform(
-        "Failed to create XRecord context".to_string(),
-      ));
-    }
-
-    xlib::XSync(ctrl_display, xlib::False);
-
-    // XRecord callback data
-    struct CallbackData {
-      tx: Sender<InputEvent>,
-      display: *mut xlib::Display,
-    }
-
-    let mut callback_data = CallbackData {
-      tx,
-      display: data_display,
-    };
-
-    extern "C" fn xrecord_callback(
-      _closure: *mut i8,
-      raw_data: *mut xrecord::XRecordInterceptData,
-    ) {
-      unsafe {
-        if raw_data.is_null() {
-          return;
-        }
-
-        let data = &*raw_data;
-        let callback_data = &*(_closure as *mut CallbackData);
-
-        if data.category == xrecord::XRecordFromServer {
-          let event = data.data as *const u8;
-          let event_type = *event;
-
-          if event_type == xlib::KeyPress as u8 || event_type == xlib::KeyRelease as u8 {
-            let keycode = *event.offset(1);
-            let keysym = xlib::XKeycodeToKeysym(callback_data.display, keycode, 0) as u32;
-            let is_press = event_type == xlib::KeyPress as u8;
-
-            if let Some(input_event) = LinuxInputListener::map_keysym_to_event(keysym, is_press) {
-              let _ = callback_data.tx.try_send(input_event);
-            }
-          }
-        }
-
-        xrecord::XRecordFreeData(raw_data);
-      }
-    }
-
-    // Enable XRecord context (this blocks until disabled)
-    let status = xrecord::XRecordEnableContext(
-      data_display,
-      context,
-      Some(xrecord_callback),
-      &mut callback_data as *mut CallbackData as *mut i8,
-    );
-
-    if status == 0 {
-      tracing::error!("XRecordEnableContext failed");
-    }
-
-    // Cleanup
-    xrecord::XRecordDisableContext(ctrl_display, context);
-    xrecord::XRecordFreeContext(ctrl_display, context);
-    xlib::XCloseDisplay(data_display);
-    xlib::XCloseDisplay(ctrl_display);
-  }
-
-  Ok(())
+pub fn create_input_listener(_options: InputOptions) -> Result<Box<dyn InputListener>> {
+  Err(Error::Platform("Built-in keyboard capture is available on macOS. On X11, bind kact commands in your window manager or shortcut tool.".into()))
 }
 
 pub struct LinuxCursorActuator {
-  #[cfg(target_os = "linux")]
-  display: Option<*mut xlib::Display>,
+  display: *mut xlib::Display,
+  held: Vec<MouseButton>,
+  remainder: Vector2D,
 }
-
+// The connection is owned by this actuator and accessed on one runtime thread.
+unsafe impl Send for LinuxCursorActuator {}
 impl LinuxCursorActuator {
   pub fn new() -> Result<Self> {
-    #[cfg(target_os = "linux")]
-    {
-      // Open X11 display
-      let display = unsafe { xlib::XOpenDisplay(std::ptr::null()) };
-
-      if display.is_null() {
-        return Err(Error::Platform(
-          "Failed to open X11 display. Is DISPLAY set?".to_string(),
-        ));
-      }
-
-      Ok(Self { display: Some(display) })
+    if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+      return Err(Error::Platform(
+        "Native Wayland cursor injection is unsupported; use an X11 session".into(),
+      ));
     }
-
-    #[cfg(not(target_os = "linux"))]
-    Ok(Self {})
-  }
-}
-
-impl Drop for LinuxCursorActuator {
-  fn drop(&mut self) {
-    #[cfg(target_os = "linux")]
-    if let Some(display) = self.display {
+    let display = unsafe { xlib::XOpenDisplay(std::ptr::null()) };
+    if display.is_null() {
+      return Err(Error::Platform("Cannot open X11 display; check DISPLAY".into()));
+    }
+    let (mut event, mut error, mut major, mut minor) = (0, 0, 0, 0);
+    if unsafe { xtest::XTestQueryExtension(display, &mut event, &mut error, &mut major, &mut minor) } == 0 {
       unsafe {
         xlib::XCloseDisplay(display);
       }
+      return Err(Error::Platform("X11 server lacks XTest extension".into()));
     }
+    Ok(Self {
+      display,
+      held: Vec::new(),
+      remainder: Vector2D::zero(),
+    })
+  }
+  fn flush(&self, success: i32) -> Result<()> {
+    if success == 0 {
+      return Err(Error::Platform("X11 input injection failed".into()));
+    }
+    unsafe {
+      xlib::XFlush(self.display);
+    }
+    Ok(())
+  }
+  fn button(&self, button: u32, pressed: bool) -> Result<()> {
+    self.flush(unsafe { xtest::XTestFakeButtonEvent(self.display, button, i32::from(pressed), 0) })
+  }
+  fn reject_modifiers(modifiers: &[String]) -> Result<()> {
+    if !modifiers.is_empty() {
+      return Err(Error::Platform(
+        "Modified clicks are currently available on macOS only".into(),
+      ));
+    }
+    Ok(())
   }
 }
-
+fn button_number(button: MouseButton) -> u32 {
+  match button {
+    MouseButton::Left => 1,
+    MouseButton::Middle => 2,
+    MouseButton::Right => 3,
+  }
+}
 impl CursorActuator for LinuxCursorActuator {
   fn move_relative(&mut self, delta: Vector2D) -> Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-      if let Some(display) = self.display {
-        unsafe {
-          xtest::XTestFakeRelativeMotionEvent(
-            display,
-            -1, // default screen
-            delta.x as i32,
-            delta.y as i32,
-            0, // delay
-          );
-          xlib::XFlush(display);
-        }
-
-        tracing::trace!("Moved cursor relative ({}, {})", delta.x, delta.y);
-        return Ok(());
-      } else {
-        return Err(Error::Platform("X11 display not initialized".to_string()));
-      }
+    if !delta.x.is_finite() || !delta.y.is_finite() {
+      return Err(Error::Platform("Cursor coordinates must be finite".into()));
     }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-      tracing::trace!("move_relative: ({}, {}) - stub", delta.x, delta.y);
-      Ok(())
+    let total = delta.add(&self.remainder);
+    let whole = Vector2D::new(total.x.round(), total.y.round());
+    if whole.x != 0.0 || whole.y != 0.0 {
+      self.flush(unsafe { xtest::XTestFakeRelativeMotionEvent(self.display, whole.x as i32, whole.y as i32, 0) })?;
     }
+    self.remainder = Vector2D::new(total.x - whole.x, total.y - whole.y);
+    Ok(())
   }
-
   fn move_absolute(&mut self, position: Vector2D) -> Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-      if let Some(display) = self.display {
-        let screen = unsafe { xlib::XDefaultScreen(display) };
-
-        unsafe {
-          xtest::XTestFakeMotionEvent(
-            display,
-            screen,
-            position.x as i32,
-            position.y as i32,
-            0, // delay
-          );
-          xlib::XFlush(display);
-        }
-
-        tracing::trace!("Moved cursor absolute ({}, {})", position.x, position.y);
-        return Ok(());
-      } else {
-        return Err(Error::Platform("X11 display not initialized".to_string()));
-      }
+    if !position.x.is_finite() || !position.y.is_finite() {
+      return Err(Error::Platform("Cursor coordinates must be finite".into()));
     }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-      tracing::trace!("move_absolute: ({}, {}) - stub", position.x, position.y);
-      Ok(())
-    }
+    self.flush(unsafe {
+      xtest::XTestFakeMotionEvent(
+        self.display,
+        -1,
+        position.x.round() as i32,
+        position.y.round() as i32,
+        0,
+      )
+    })?;
+    self.remainder = Vector2D::zero();
+    Ok(())
   }
-
   fn get_position(&self) -> Result<Vector2D> {
-    #[cfg(target_os = "linux")]
-    {
-      if let Some(display) = self.display {
-        let screen = unsafe { xlib::XDefaultScreen(display) };
-        let root = unsafe { xlib::XRootWindow(display, screen) };
-
-        let mut root_return: xlib::Window = 0;
-        let mut child_return: xlib::Window = 0;
-        let mut root_x: i32 = 0;
-        let mut root_y: i32 = 0;
-        let mut win_x: i32 = 0;
-        let mut win_y: i32 = 0;
-        let mut mask: u32 = 0;
-
-        unsafe {
-          xlib::XQueryPointer(
-            display,
-            root,
-            &mut root_return,
-            &mut child_return,
-            &mut root_x,
-            &mut root_y,
-            &mut win_x,
-            &mut win_y,
-            &mut mask,
-          );
-        }
-
-        return Ok(Vector2D {
-          x: root_x as f64,
-          y: root_y as f64,
-        });
-      } else {
-        return Err(Error::Platform("X11 display not initialized".to_string()));
+    let root = unsafe { xlib::XDefaultRootWindow(self.display) };
+    let (mut root_return, mut child) = (0, 0);
+    let (mut root_x, mut root_y, mut win_x, mut win_y) = (0, 0, 0, 0);
+    let mut mask = 0;
+    let success = unsafe {
+      xlib::XQueryPointer(
+        self.display,
+        root,
+        &mut root_return,
+        &mut child,
+        &mut root_x,
+        &mut root_y,
+        &mut win_x,
+        &mut win_y,
+        &mut mask,
+      )
+    };
+    if success == 0 {
+      return Err(Error::Platform("Cannot query X11 pointer".into()));
+    }
+    Ok(Vector2D {
+      x: root_x as f64,
+      y: root_y as f64,
+    })
+  }
+  fn click(&mut self, button: MouseButton, count: u8, modifiers: &[String]) -> Result<()> {
+    Self::reject_modifiers(modifiers)?;
+    if !(1..=3).contains(&count) {
+      return Err(Error::Platform("Click count must be 1 through 3".into()));
+    }
+    if self.held.contains(&button) {
+      return Err(Error::Platform("Release held button before clicking it".into()));
+    }
+    for _ in 0..count {
+      self.button_down(button, modifiers)?;
+      self.button_up(button, modifiers)?;
+    }
+    Ok(())
+  }
+  fn button_down(&mut self, button: MouseButton, modifiers: &[String]) -> Result<()> {
+    Self::reject_modifiers(modifiers)?;
+    if !self.held.contains(&button) {
+      self.button(button_number(button), true)?;
+      self.held.push(button);
+    }
+    Ok(())
+  }
+  fn button_up(&mut self, button: MouseButton, modifiers: &[String]) -> Result<()> {
+    Self::reject_modifiers(modifiers)?;
+    self.button(button_number(button), false)?;
+    self.held.retain(|held| *held != button);
+    Ok(())
+  }
+  fn scroll(&mut self, dx: i32, dy: i32) -> Result<()> {
+    if dx.unsigned_abs() > 1000 || dy.unsigned_abs() > 1000 {
+      return Err(Error::Platform("X11 scroll must be within 1000 wheel steps".into()));
+    }
+    for (amount, negative, positive) in [(dy, 5, 4), (dx, 7, 6)] {
+      for _ in 0..amount.unsigned_abs() {
+        let button = if amount < 0 { negative } else { positive };
+        self.button(button, true)?;
+        self.button(button, false)?;
       }
     }
-
-    #[cfg(not(target_os = "linux"))]
-    Ok(Vector2D::zero())
+    Ok(())
+  }
+  fn release_all(&mut self) -> Result<()> {
+    let mut error = None;
+    for button in self.held.clone() {
+      if let Err(e) = self.button_up(button, &[]) {
+        error = Some(e);
+      }
+    }
+    error.map_or(Ok(()), Err)
+  }
+}
+impl Drop for LinuxCursorActuator {
+  fn drop(&mut self) {
+    let _ = self.release_all();
+    unsafe {
+      xlib::XCloseDisplay(self.display);
+    }
   }
 }

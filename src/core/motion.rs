@@ -1,143 +1,90 @@
 use super::state::{AppState, Mode};
 use super::types::Vector2D;
-use crate::config::MotionConfig;
+use crate::config::{ModeConfig, MotionConfig};
 
 pub struct MotionEngine {
   config: MotionConfig,
+  modes: ModeConfig,
 }
 
 impl MotionEngine {
   pub fn new(config: MotionConfig) -> Self {
-    Self { config }
+    Self::with_modes(config, ModeConfig::default())
+  }
+
+  pub fn with_modes(config: MotionConfig, modes: ModeConfig) -> Self {
+    Self { config, modes }
   }
 
   pub fn update_config(&mut self, config: MotionConfig) {
     self.config = config;
   }
 
-  /// Pure function: (State, DeltaTime) -> (NewVelocity, DeltaPosition)
+  pub fn update_modes(&mut self, modes: ModeConfig) {
+    self.modes = modes;
+  }
+
   pub fn tick(&self, state: &AppState, delta_time: f64) -> (Vector2D, Vector2D) {
-    if !state.active || state.emergency_stop {
+    if !state.active || state.emergency_stop || !delta_time.is_finite() || delta_time <= 0.0 {
       return (Vector2D::zero(), Vector2D::zero());
     }
-
-    let input_vector = state.input.get_input_vector();
-    let mode_multiplier = self.get_mode_multiplier(state.input.mode);
-
-    // Calculate target velocity based on input
-    let target_velocity = if input_vector.magnitude() > 0.0 {
-      let curve_factor = self.apply_curve(input_vector.magnitude());
-      input_vector.scale(self.config.max_speed * curve_factor * mode_multiplier)
-    } else {
-      Vector2D::zero()
-    };
-
-    // Interpolate towards target velocity (acceleration)
-    let new_velocity = self.lerp_velocity(&state.velocity, &target_velocity, delta_time);
-
-    // Apply friction when no input
-    let new_velocity = if input_vector.magnitude() == 0.0 {
-      new_velocity.scale(self.config.friction)
-    } else {
-      new_velocity
-    };
-
-    // Calculate position delta
-    let delta_position = new_velocity.scale(delta_time);
-
-    (new_velocity, delta_position)
-  }
-
-  fn get_mode_multiplier(&self, mode: Mode) -> f64 {
-    // Note: These should come from config.modes in a real implementation
-    // For now, using hardcoded values
-    match mode {
-      Mode::Normal => 1.0,
-      Mode::Precise => 0.3,
-      Mode::Fast => 2.5,
+    let input = state.input.get_input_vector();
+    if input.magnitude() == 0.0 {
+      // Integrate exponential decay, keeping stopping distance independent of frame rate.
+      if self.config.friction <= 0.0 {
+        return (Vector2D::zero(), Vector2D::zero());
+      }
+      let rate = -self.config.friction.ln() * 60.0;
+      let decay = (-rate * delta_time).exp();
+      let velocity = state.velocity.scale(decay);
+      let delta = state.velocity.scale((1.0 - decay) / rate);
+      return (
+        if velocity.magnitude() < 0.01 {
+          Vector2D::zero()
+        } else {
+          velocity
+        },
+        delta,
+      );
     }
-  }
-
-  fn apply_curve(&self, input_magnitude: f64) -> f64 {
-    match self.config.curve_type.as_str() {
-      "sigmoid" => self.sigmoid_curve(input_magnitude),
-      "exponential" => self.exponential_curve(input_magnitude),
-      "linear" => input_magnitude,
-      _ => input_magnitude,
+    let multiplier = match state.input.mode {
+      Mode::Normal => self.modes.normal_multiplier,
+      Mode::Precise => self.modes.precise_multiplier,
+      Mode::Fast => self.modes.fast_multiplier,
+    };
+    let speed = self.config.max_speed * multiplier;
+    let target = input.scale(speed);
+    if self.config.acceleration >= 1.0 {
+      return (target, target.scale(delta_time));
     }
-  }
-
-  fn sigmoid_curve(&self, x: f64) -> f64 {
-    // Sigmoid: 1 / (1 + e^(-k(x - 0.5)))
-    // Maps [0, 1] to smooth S-curve
-    let k = 10.0 * self.config.acceleration;
-    1.0 / (1.0 + (-k * (x - 0.5)).exp())
-  }
-
-  fn exponential_curve(&self, x: f64) -> f64 {
-    // Exponential: x^p where p controls steepness
-    let power = 1.0 + (1.0 - self.config.acceleration) * 2.0;
-    x.powf(power)
-  }
-
-  fn lerp_velocity(&self, current: &Vector2D, target: &Vector2D, delta_time: f64) -> Vector2D {
-    // Smooth interpolation with acceleration factor
-    let t = 1.0 - (1.0 - self.config.acceleration).powf(delta_time * 60.0);
-    Vector2D::new(
-      current.x + (target.x - current.x) * t,
-      current.y + (target.y - current.y) * t,
-    )
+    let rate = -(1.0 - self.config.acceleration).ln() * 60.0;
+    let difference = Vector2D::new(state.velocity.x - target.x, state.velocity.y - target.y);
+    let distance = difference.magnitude();
+    if distance < f64::EPSILON {
+      return (target, target.scale(delta_time));
+    }
+    let (remaining, integrated) = match self.config.curve_type.as_str() {
+      "linear" => {
+        let acceleration = speed * rate;
+        let time = delta_time.min(distance / acceleration);
+        let remaining = (distance - acceleration * delta_time).max(0.0) / distance;
+        (remaining, time - acceleration * time * time / (2.0 * distance))
+      }
+      "sigmoid" => {
+        // Logistic decay of distance to the target has an exact time-based integral.
+        let normalized = distance / (distance + speed);
+        let end = normalized * (-rate * delta_time).exp();
+        let remaining = speed * end / ((1.0 - end) * distance);
+        let integrated = speed * ((1.0 - end) / (1.0 - normalized)).ln() / (rate * distance);
+        (remaining, integrated)
+      }
+      _ => {
+        let decay = (-rate * delta_time).exp();
+        (decay, (1.0 - decay) / rate)
+      }
+    };
+    let velocity = target.add(&difference.scale(remaining));
+    let delta = target.scale(delta_time).add(&difference.scale(integrated));
+    (velocity, delta)
   }
 }
-//
-// #[cfg(test)]
-// mod tests {
-//   use super::*;
-//   use crate::config::MotionConfig;
-//
-//   fn test_config() -> MotionConfig {
-//     MotionConfig {
-//       curve_type: "linear".to_string(),
-//       max_speed: 1000.0,
-//       acceleration: 0.8,
-//       friction: 0.95,
-//       target_fps: 60,
-//     }
-//   }
-//
-//   #[test]
-//   fn test_motion_engine_no_input() {
-//     let engine = MotionEngine::new(test_config());
-//     let state = AppState {
-//       active: true,
-//       ..Default::default()
-//     };
-//
-//     let (velocity, _) = engine.tick(&state, 1.0 / 60.0);
-//     assert_eq!(velocity.magnitude(), 0.0);
-//   }
-//
-//   #[test]
-//   fn test_motion_engine_inactive() {
-//     let engine = MotionEngine::new(test_config());
-//     let mut state = AppState::default();
-//     state.input.press_direction(super::super::types::Direction::Right);
-//
-//     let (velocity, _) = engine.tick(&state, 1.0 / 60.0);
-//     assert_eq!(velocity.magnitude(), 0.0);
-//   }
-//
-//   #[test]
-//   fn test_motion_engine_emergency_stop() {
-//     let engine = MotionEngine::new(test_config());
-//     let mut state = AppState {
-//       active: true,
-//       emergency_stop: true,
-//       ..Default::default()
-//     };
-//     state.input.press_direction(super::super::types::Direction::Right);
-//
-//     let (velocity, _) = engine.tick(&state, 1.0 / 60.0);
-//     assert_eq!(velocity.magnitude(), 0.0);
-//   }
-// }
