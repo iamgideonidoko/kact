@@ -89,23 +89,23 @@ All commands accept `--config PATH` and `--socket PATH`; these identify the daem
 
 Normal typing is untouched while navigation is inactive. Explicit activation enables local navigation controls by default; only handled keys are consumed.
 
-| Key | Action |
-| --- | --- |
-| Displayed label | Jump to the target |
-| Escape / Cmd+. / Ctrl+G | Clear prefix, then exit on the next press |
-| Backspace | Remove one prefix character |
-| Cmd+H | Hide navigation |
-| Arrows / Alt+arrows | Move 10 / 100 points |
-| Cmd+arrows | Jump to screen edges |
-| Ctrl+L | Center, then cycle through corners |
-| Enter | Click or drop a drag |
-| `=` / `\` | Begin drag / double-click |
-| `[` / `]` | Middle / right click |
-| Shift+arrows | Scroll |
-| Modifier+Enter | Click with those modifiers |
-| Ctrl+= / Ctrl+Shift+= | Toggle grid lines / labels |
-| Cmd+Shift+= / Cmd+Shift+- | Increase / decrease cell size |
-| Cmd+= / Cmd+- | Increase / decrease contrast |
+| Key                       | Action                                    |
+| ------------------------- | ----------------------------------------- |
+| Displayed label           | Jump to the target                        |
+| Escape / Cmd+. / Ctrl+G   | Clear prefix, then exit on the next press |
+| Backspace                 | Remove one prefix character               |
+| Cmd+H                     | Hide navigation                           |
+| Arrows / Alt+arrows       | Move 10 / 100 points                      |
+| Cmd+arrows                | Jump to screen edges                      |
+| Ctrl+L                    | Center, then cycle through corners        |
+| Enter                     | Click or drop a drag                      |
+| `=` / `\`                 | Begin drag / double-click                 |
+| `[` / `]`                 | Middle / right click                      |
+| Shift+arrows              | Scroll                                    |
+| Modifier+Enter            | Click with those modifiers                |
+| Ctrl+= / Ctrl+Shift+=     | Toggle grid lines / labels                |
+| Cmd+Shift+= / Cmd+Shift+- | Increase / decrease cell size             |
+| Cmd+= / Cmd+-             | Increase / decrease contrast              |
 
 System controls include Emacs movement shortcuts. Set `keybindings.preset = "vi"` for H/J/K/L movement, Ctrl+H/J/K/L larger steps, Shift+H/J/K/L edges, Shift+M center/corners, and Ctrl+B/F/I/A scrolling. Keys reserved by local bindings are removed from the label alphabet so targets remain reachable.
 
