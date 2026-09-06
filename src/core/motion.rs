@@ -89,3 +89,55 @@ impl MotionEngine {
     )
   }
 }
+//
+// #[cfg(test)]
+// mod tests {
+//   use super::*;
+//   use crate::config::MotionConfig;
+//
+//   fn test_config() -> MotionConfig {
+//     MotionConfig {
+//       curve_type: "linear".to_string(),
+//       max_speed: 1000.0,
+//       acceleration: 0.8,
+//       friction: 0.95,
+//       target_fps: 60,
+//     }
+//   }
+//
+//   #[test]
+//   fn test_motion_engine_no_input() {
+//     let engine = MotionEngine::new(test_config());
+//     let state = AppState {
+//       active: true,
+//       ..Default::default()
+//     };
+//
+//     let (velocity, _) = engine.tick(&state, 1.0 / 60.0);
+//     assert_eq!(velocity.magnitude(), 0.0);
+//   }
+//
+//   #[test]
+//   fn test_motion_engine_inactive() {
+//     let engine = MotionEngine::new(test_config());
+//     let mut state = AppState::default();
+//     state.input.press_direction(super::super::types::Direction::Right);
+//
+//     let (velocity, _) = engine.tick(&state, 1.0 / 60.0);
+//     assert_eq!(velocity.magnitude(), 0.0);
+//   }
+//
+//   #[test]
+//   fn test_motion_engine_emergency_stop() {
+//     let engine = MotionEngine::new(test_config());
+//     let mut state = AppState {
+//       active: true,
+//       emergency_stop: true,
+//       ..Default::default()
+//     };
+//     state.input.press_direction(super::super::types::Direction::Right);
+//
+//     let (velocity, _) = engine.tick(&state, 1.0 / 60.0);
+//     assert_eq!(velocity.magnitude(), 0.0);
+//   }
+// }

@@ -22,10 +22,17 @@ core-graphics = "0.23"
 core-foundation = "0.9"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-x11 = { version = "2.21", features = ["xlib", "xtest"] }
+x11 = { version = "2.21", features = ["xlib", "xtest", "xrecord"] }
 
+# [dev-dependencies]
+# approx = "0.5"
+#
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+[features]
+default = ["mac-dev-mode"]
+mac-dev-mode = []

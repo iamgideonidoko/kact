@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub enum ControlMessage {
-  UpdateConfig(Config),
+  UpdateConfig(Box<Config>),
   Shutdown,
 }
 
@@ -120,7 +120,7 @@ impl Runtime {
           ControlMessage::UpdateConfig(new_config) => {
             tracing::info!("Hot-reloading configuration");
             engine.update_config(new_config.motion.clone());
-            *config.lock().unwrap() = new_config;
+            *config.lock().unwrap() = *new_config;
           }
           ControlMessage::Shutdown => {
             tracing::info!("Motion thread shutting down");
@@ -152,10 +152,10 @@ impl Runtime {
       }
 
       // Move cursor (if there's movement)
-      if delta_position.magnitude() > 0.01 {
-        if let Err(e) = actuator.move_relative(delta_position) {
-          tracing::error!("Failed to move cursor: {}", e);
-        }
+      if delta_position.magnitude() > 0.01
+        && let Err(e) = actuator.move_relative(delta_position)
+      {
+        tracing::error!("Failed to move cursor: {}", e);
       }
 
       // Check emergency stop
@@ -205,7 +205,7 @@ impl Runtime {
   pub fn update_config(&self, config: Config) -> Result<()> {
     self
       .control_tx
-      .send(ControlMessage::UpdateConfig(config))
+      .send(ControlMessage::UpdateConfig(Box::new(config)))
       .map_err(|_| Error::ChannelSend)?;
     Ok(())
   }

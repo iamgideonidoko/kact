@@ -1,17 +1,12 @@
 use super::types::{Direction, Vector2D};
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
+  #[default]
   Normal,
   Precise,
   Fast,
-}
-
-impl Default for Mode {
-  fn default() -> Self {
-    Mode::Normal
-  }
 }
 
 #[derive(Debug, Clone, Default)]

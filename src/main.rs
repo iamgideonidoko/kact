@@ -3,7 +3,6 @@ use clap::Parser;
 use kact::config::Config;
 use kact::runtime::{ConfigWatcher, Runtime};
 use std::path::PathBuf;
-use tracing_subscriber;
 
 #[derive(Parser, Debug)]
 #[command(name = "kact")]
@@ -67,12 +66,12 @@ fn main() -> Result<()> {
   tracing::info!("Press Ctrl+C to stop");
 
   loop {
-    if let Some(ref w) = watcher {
-      if let Some(new_config) = w.try_recv() {
-        tracing::info!("Reloading configuration");
-        if let Err(e) = runtime.update_config(new_config) {
-          tracing::error!("Failed to update config: {}", e);
-        }
+    if let Some(ref w) = watcher
+      && let Some(new_config) = w.try_recv()
+    {
+      tracing::info!("Reloading configuration");
+      if let Err(e) = runtime.update_config(new_config) {
+        tracing::error!("Failed to update config: {}", e);
       }
     }
 
