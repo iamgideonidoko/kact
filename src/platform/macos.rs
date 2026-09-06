@@ -441,6 +441,15 @@ impl MacOSCursorActuator {
     modifiers: &[String],
     point: Vector2D,
   ) -> Result<()> {
+    if !matches!(
+      kind,
+      CGEventType::LeftMouseUp | CGEventType::RightMouseUp | CGEventType::OtherMouseUp
+    ) && !accessibility_trusted(false)
+    {
+      return Err(Error::Platform(
+        "Accessibility permission was revoked; enable it before retrying".into(),
+      ));
+    }
     let event = CGEvent::new_mouse_event(
       Self::source()?,
       kind,
@@ -548,6 +557,9 @@ impl CursorActuator for MacOSCursorActuator {
     Ok(())
   }
   fn scroll(&mut self, dx: i32, dy: i32) -> Result<()> {
+    if !accessibility_trusted(false) {
+      return Err(Error::Platform("Accessibility permission was revoked".into()));
+    }
     let event = CGEvent::new_scroll_event(Self::source()?, 0, 2, dy, dx, 0)
       .map_err(|_| Error::Platform("Cannot create scroll event".into()))?;
     event.set_flags(CGEventFlags::empty());

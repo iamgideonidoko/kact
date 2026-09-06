@@ -25,6 +25,11 @@ pub enum Command {
   Start,
   /// Run the service in the foreground
   Daemon,
+  /// Configure automatic startup at login (macOS)
+  Service {
+    #[command(subcommand)]
+    command: ServiceCommand,
+  },
   /// Show service and navigation state
   Status,
   /// Stop the background service and release held buttons
@@ -142,6 +147,15 @@ pub enum ConfigCommand {
   Path,
 }
 
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ServiceCommand {
+  /// Enable startup at the next login
+  Install,
+  /// Disable login startup and unload the managed service
+  Uninstall,
+}
+
 macro_rules! values {
   ($name:ident { $($variant:ident),+ $(,)? }) => {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
@@ -180,8 +194,10 @@ impl Command {
     let cli =
       Cli::try_parse_from(std::iter::once("kact").chain(binding.split_whitespace())).map_err(|e| e.to_string())?;
     let command = cli.command.ok_or("binding needs an action")?;
-    if matches!(command, Self::Start | Self::Daemon | Self::Config { .. } | Self::Doctor)
-      || cli.config.is_some()
+    if matches!(
+      command,
+      Self::Start | Self::Daemon | Self::Config { .. } | Self::Service { .. } | Self::Doctor
+    ) || cli.config.is_some()
       || cli.socket.is_some()
       || cli.log_level.is_some()
     {

@@ -143,7 +143,17 @@ impl Server {
               tracing::debug!(%error, "Command connection ended");
             }
           }
-          Err(e) if e.kind() == io::ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(5)),
+          Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+            let mut ready = libc::pollfd {
+              fd: listener.as_raw_fd(),
+              events: libc::POLLIN,
+              revents: 0,
+            };
+            // Sleep until a client arrives, with a bounded shutdown check.
+            unsafe {
+              libc::poll(&mut ready, 1, 50);
+            }
+          }
           Err(error) => {
             tracing::error!(%error, "Command listener failed");
             stop.store(true, Ordering::Relaxed);

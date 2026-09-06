@@ -15,7 +15,15 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 fn main() -> Result<()> {
-  let cli = Cli::parse();
+  let mut cli = Cli::parse();
+  // Finder launches the bundled menu-bar app without CLI arguments.
+  if cli.command.is_none()
+    && std::env::current_exe()?
+      .parent()
+      .is_some_and(|p| p.ends_with("Contents/MacOS"))
+  {
+    cli.command = Some(Command::Daemon);
+  }
   let config_path = cli.config.clone().unwrap_or_else(Config::default_path);
   let socket = cli.socket.clone().unwrap_or_else(ipc::default_socket);
   let Some(command) = cli.command.clone() else {
@@ -52,6 +60,7 @@ fn main() -> Result<()> {
         bail!("Enable Accessibility for Kact in System Settings > Privacy & Security");
       }
     }
+    Command::Service { command } => kact::service::configure(command, &absolute(&config_path)?, &absolute(&socket)?)?,
     Command::Start => start(&cli, &config_path, &socket)?,
     Command::Daemon => daemon(&cli, &config_path, &socket)?,
     command => print_reply(ipc::send(&socket, &command)?)?,
@@ -162,6 +171,9 @@ fn absolute(path: &Path) -> Result<PathBuf> {
 }
 
 fn daemon(cli: &Cli, config_path: &Path, socket: &Path) -> Result<()> {
+  if !config_path.exists() {
+    initialize_config(config_path)?;
+  }
   let config = load_config(config_path, false)?;
   let level = cli
     .log_level
@@ -180,6 +192,9 @@ fn daemon(cli: &Cli, config_path: &Path, socket: &Path) -> Result<()> {
   let stopped = Arc::new(AtomicBool::new(false));
   signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stopped))?;
   signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stopped))?;
+  if !kact::platform::accessibility_trusted(true) {
+    bail!("Enable Accessibility for Kact in System Settings > Privacy & Security, then reopen Kact");
+  }
   let mut runtime = Runtime::new(config, config_path.into())?;
   let watcher = ConfigWatcher::new(config_path)
     .map_err(|error| tracing::warn!(%error, "Automatic config reload unavailable"))
@@ -223,7 +238,7 @@ fn daemon(cli: &Cli, config_path: &Path, socket: &Path) -> Result<()> {
       break;
     }
     runtime.poll()?;
-    std::thread::sleep(Duration::from_millis(2));
+    std::thread::sleep(runtime.sleep_duration());
   }
   // Dropping runtime releases held buttons and stops input before socket removal.
   drop(runtime);

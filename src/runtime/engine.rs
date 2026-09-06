@@ -239,10 +239,28 @@ impl Runtime {
 
   pub fn execute(&mut self, command: Command) -> Result<Value> {
     command.validate().map_err(anyhow::Error::msg)?;
+    let mouse_action = matches!(
+      command,
+      Command::Move { .. }
+        | Command::MoveTo { .. }
+        | Command::Click { .. }
+        | Command::ButtonDown { .. }
+        | Command::ButtonUp { .. }
+        | Command::Scroll { .. }
+        | Command::Jump { .. }
+    );
+    let result = self.apply(command);
+    if mouse_action && result.is_err() {
+      let _ = self.deactivate();
+    }
+    result
+  }
+
+  fn apply(&mut self, command: Command) -> Result<Value> {
     match command {
       Command::Status => {
         return Ok(
-          json!({ "running": true, "active": self.mode.is_some(), "moving": !self.state.input.active_directions.is_empty(), "mode": self.mode, "prefix": self.navigation.as_ref().map(|n| n.prefix.as_str()), "targets": self.navigation.as_ref().map_or(0, |n| n.targets.len()), "config": self.config_path, "global_shortcuts": self.bindings.global.len(), "navigation_keyboard": self.config.keybindings.navigation_enabled }),
+          json!({ "running": true, "position": self.cursor.get_position().ok().map(|point| json!({"x": point.x, "y": point.y})), "active": self.mode.is_some(), "moving": !self.state.input.active_directions.is_empty(), "mode": self.mode, "prefix": self.navigation.as_ref().map(|n| n.prefix.as_str()), "targets": self.navigation.as_ref().map_or(0, |n| n.targets.len()), "config": self.config_path, "global_shortcuts": self.bindings.global.len(), "navigation_keyboard": self.config.keybindings.navigation_enabled }),
         );
       }
       Command::Activate { mode } => self.activate(mode)?,
@@ -405,6 +423,17 @@ impl Runtime {
       }
     }
     if let Some(rect) = selected {
+      if self.mode == Some(NavigationMode::Elements) {
+        let current = self.desktop()?.elements()?;
+        if !current.contains(&rect) {
+          self.navigation = Some(Navigation::from_rects(
+            &current,
+            &self.bindings.alphabet(&self.config)?,
+          )?);
+          self.render()?;
+          bail!("targets changed; select a label from the refreshed overlay");
+        }
+      }
       self
         .cursor
         .move_absolute(Vector2D::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0))?;
@@ -523,6 +552,16 @@ impl Runtime {
     Ok(())
   }
 
+  pub fn sleep_duration(&self) -> Duration {
+    if !self.state.input.active_directions.is_empty() || self.state.velocity.magnitude() > 0.01 {
+      Duration::from_secs_f64(1.0 / self.config.motion.target_fps as f64)
+        .saturating_sub(self.last_tick.elapsed())
+        .clamp(Duration::from_millis(1), Duration::from_millis(16))
+    } else {
+      Duration::from_millis(16)
+    }
+  }
+
   pub fn poll(&mut self) -> Result<()> {
     let events = self.desktop.as_mut().map(|d| d.pump()).unwrap_or_default();
     for event in events {
@@ -616,7 +655,7 @@ impl Runtime {
   }
 
   fn open_help(&self) -> Result<()> {
-    let path = std::env::temp_dir().join(format!("kact-help-{}.txt", std::process::id()));
+    let path = self.config_path.with_file_name("help.txt");
     std::fs::write(
       &path,
       "Kact\n\nUse `kact --help` for commands.\nActivate Grid or Elements, then type a label to move.\nArrow keys nudge; Alt+arrows move farther; Cmd+arrows jump to edges.\nEnter clicks, = begins a drag, Enter drops, \\ double-clicks.\n[ middle-clicks, ] right-clicks; Shift+arrows scroll.\nEscape clears a label or exits. Cmd+H hides.\nPreferences opens your TOML config.\n",

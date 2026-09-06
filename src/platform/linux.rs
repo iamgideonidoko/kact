@@ -74,7 +74,8 @@ impl CursorActuator for LinuxCursorActuator {
     let total = delta.add(&self.remainder);
     let whole = Vector2D::new(total.x.round(), total.y.round());
     if whole.x != 0.0 || whole.y != 0.0 {
-      self.flush(unsafe { xtest::XTestFakeRelativeMotionEvent(self.display, whole.x as i32, whole.y as i32, 0) })?;
+      let target = self.get_position()?.add(&whole);
+      self.move_absolute(target)?;
     }
     self.remainder = Vector2D::new(total.x - whole.x, total.y - whole.y);
     Ok(())

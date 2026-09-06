@@ -8,3 +8,4 @@ pub use error::{Error, Result};
 pub mod command;
 pub mod desktop;
 pub mod ipc;
+pub mod service;
