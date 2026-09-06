@@ -15,15 +15,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 fn main() -> Result<()> {
-  let mut cli = Cli::parse();
-  // Finder launches the bundled menu-bar app without CLI arguments.
-  if cli.command.is_none()
-    && std::env::current_exe()?
-      .parent()
-      .is_some_and(|p| p.ends_with("Contents/MacOS"))
-  {
-    cli.command = Some(Command::Daemon);
-  }
+  let cli = Cli::parse();
   let config_path = cli.config.clone().unwrap_or_else(Config::default_path);
   let socket = cli.socket.clone().unwrap_or_else(ipc::default_socket);
   let Some(command) = cli.command.clone() else {
@@ -147,10 +139,7 @@ fn start(cli: &Cli, config_path: &Path, socket: &Path) -> Result<()> {
     if let Ok(reply) = ipc::send(socket, &Command::Status)
       && reply.ok
     {
-      println!(
-        "Kact started. Use `kact activate grid` or the menu bar. Logs: {}",
-        log_path.display()
-      );
+      println!("Kact started. Use `kact activate grid`. Logs: {}", log_path.display());
       return Ok(());
     }
     if Instant::now() >= deadline {

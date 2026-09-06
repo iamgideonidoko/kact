@@ -37,17 +37,6 @@ impl Default for Appearance {
   }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DesktopAction {
-  ActivateGrid,
-  ActivateElements,
-  ActivateFreestyle,
-  Deactivate,
-  OpenConfig,
-  Help,
-  Quit,
-}
-
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
@@ -59,7 +48,7 @@ pub struct Desktop;
 #[cfg(not(target_os = "macos"))]
 impl Desktop {
   pub fn new() -> anyhow::Result<Self> {
-    anyhow::bail!("Native overlays and menu bar currently require macOS")
+    anyhow::bail!("Native overlays currently require macOS")
   }
   pub fn screens(&self) -> anyhow::Result<Vec<Rect>> {
     anyhow::bail!("Display discovery currently requires macOS")
@@ -74,8 +63,5 @@ impl Desktop {
     anyhow::bail!("Native overlays currently require macOS")
   }
   pub fn hide(&mut self) {}
-  pub fn pump(&mut self) -> Vec<DesktopAction> {
-    Vec::new()
-  }
-  pub fn set_active(&mut self, _: bool) {}
+  pub fn pump(&mut self) {}
 }

@@ -11,15 +11,12 @@ use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Sel};
 use objc::{class, msg_send, sel, sel_impl};
 use std::{
-  cell::RefCell,
   collections::{HashSet, VecDeque},
   marker::PhantomData,
   rc::Rc,
   sync::Once,
   time::{Duration, Instant},
 };
-
-thread_local! { static ACTIONS: RefCell<Vec<DesktopAction>> = const { RefCell::new(Vec::new()) }; }
 
 struct OverlayData {
   targets: Vec<Target>,
@@ -35,8 +32,6 @@ struct Overlay {
 /// Owns AppKit objects; intentionally neither Send nor Sync.
 pub struct Desktop {
   app: id,
-  status: id,
-  handler: id,
   overlays: Vec<Overlay>,
   _main_thread: PhantomData<Rc<()>>,
 }
@@ -51,19 +46,6 @@ unsafe fn color(hex: &str, alpha: f64) -> id {
   }
 }
 
-extern "C" fn menu_action(_: &Object, _: Sel, sender: id) {
-  let tag: isize = unsafe { msg_send![sender, tag] };
-  let action = match tag {
-    0 => DesktopAction::ActivateGrid,
-    1 => DesktopAction::ActivateElements,
-    2 => DesktopAction::ActivateFreestyle,
-    3 => DesktopAction::Deactivate,
-    4 => DesktopAction::OpenConfig,
-    5 => DesktopAction::Help,
-    _ => DesktopAction::Quit,
-  };
-  ACTIONS.with(|actions| actions.borrow_mut().push(action));
-}
 extern "C" fn can_become_key(_: &Object, _: Sel) -> cocoa::base::BOOL {
   NO
 }
@@ -130,9 +112,6 @@ extern "C" fn draw(this: &Object, _: Sel, _: NSRect) {
 fn register_classes() {
   static ONCE: Once = Once::new();
   ONCE.call_once(|| unsafe {
-    let mut handler = ClassDecl::new("KactMenuHandler", class!(NSObject)).unwrap();
-    handler.add_method(sel!(kactAction:), menu_action as extern "C" fn(&Object, Sel, id));
-    handler.register();
     let mut view = ClassDecl::new("KactOverlayView", class!(NSView)).unwrap();
     view.add_ivar::<*const std::ffi::c_void>("kactData");
     view.add_method(sel!(drawRect:), draw as extern "C" fn(&Object, Sel, NSRect));
@@ -160,40 +139,9 @@ impl Desktop {
       let app = NSApp();
       app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory);
       app.finishLaunching();
-      let bar: id = msg_send![class!(NSStatusBar), systemStatusBar];
-      let status: id = msg_send![bar, statusItemWithLength: -1.0f64];
-      let _: id = msg_send![status, retain];
-      let button: id = msg_send![status, button];
-      let _: () = msg_send![button, setTitle: string("Kact")];
-      let handler: id = msg_send![Class::get("KactMenuHandler").unwrap(), new];
-      let menu: id = msg_send![class!(NSMenu), new];
-      for (tag, title) in [
-        "Show Grid",
-        "Show Elements",
-        "Freestyle",
-        "Deactivate",
-        "Preferences…",
-        "Help",
-        "Quit Kact",
-      ]
-      .iter()
-      .enumerate()
-      {
-        let item: id = msg_send![class!(NSMenuItem), alloc];
-        let item: id =
-          msg_send![item, initWithTitle: string(title) action: sel!(kactAction:) keyEquivalent: string("")];
-        let _: () = msg_send![item, setTag: tag as isize];
-        let _: () = msg_send![item, setTarget: handler];
-        let _: () = msg_send![menu, addItem: item];
-        let _: () = msg_send![item, release];
-      }
-      let _: () = msg_send![status, setMenu: menu];
-      let _: () = msg_send![menu, release];
       pool.drain();
       Ok(Self {
         app,
-        status,
-        handler,
         overlays: Vec::new(),
         _main_thread: PhantomData,
       })
@@ -323,7 +271,7 @@ impl Desktop {
       }
     }
   }
-  pub fn pump(&mut self) -> Vec<DesktopAction> {
+  pub fn pump(&mut self) {
     unsafe {
       let pool = NSAutoreleasePool::new(nil);
       for _ in 0..64 {
@@ -335,15 +283,6 @@ impl Desktop {
         let _: () = msg_send![self.app, sendEvent: event];
       }
       let _: () = msg_send![self.app, updateWindows];
-      pool.drain();
-    }
-    ACTIONS.with(|actions| std::mem::take(&mut *actions.borrow_mut()))
-  }
-  pub fn set_active(&mut self, active: bool) {
-    unsafe {
-      let pool = NSAutoreleasePool::new(nil);
-      let button: id = msg_send![self.status, button];
-      let _: () = msg_send![button, setTitle: string(if active { "Kact •" } else { "Kact" })];
       pool.drain();
     }
   }
@@ -368,12 +307,6 @@ impl Desktop {
 impl Drop for Desktop {
   fn drop(&mut self) {
     self.hide();
-    unsafe {
-      let bar: id = msg_send![class!(NSStatusBar), systemStatusBar];
-      let _: () = msg_send![bar, removeStatusItem: self.status];
-      let _: () = msg_send![self.status, release];
-      let _: () = msg_send![self.handler, release];
-    }
   }
 }
 

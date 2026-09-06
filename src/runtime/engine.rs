@@ -2,7 +2,7 @@ use super::bindings::Bindings;
 use crate::command::{Button, Command, Heading, JumpTarget, NavigationMode, Presentation, Speed};
 use crate::config::Config;
 use crate::core::{AppState, Direction, Mode, MotionEngine, Vector2D, navigation::Navigation};
-use crate::desktop::{Appearance, Desktop, DesktopAction, Rect};
+use crate::desktop::{Appearance, Desktop, Rect};
 use crate::platform::{self, CursorActuator, InputListener, InputOptions, KeyEvent, MouseButton};
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
@@ -176,9 +176,6 @@ impl Runtime {
     self.labels_active.store(self.navigation.is_some(), Ordering::Release);
     self.active.store(true, Ordering::Release);
     self.last_tick = Instant::now();
-    if let Some(desktop) = self.desktop.as_mut() {
-      desktop.set_active(true);
-    }
     if let Err(error) = self.render() {
       self.deactivate()?;
       return Err(error);
@@ -232,7 +229,6 @@ impl Runtime {
     self.selected = None;
     if let Some(desktop) = self.desktop.as_mut() {
       desktop.hide();
-      desktop.set_active(false);
     }
     self.stop_motion()
   }
@@ -563,32 +559,8 @@ impl Runtime {
   }
 
   pub fn poll(&mut self) -> Result<()> {
-    let events = self.desktop.as_mut().map(|d| d.pump()).unwrap_or_default();
-    for event in events {
-      let command = match event {
-        DesktopAction::ActivateGrid => Command::Activate {
-          mode: NavigationMode::Grid,
-        },
-        DesktopAction::ActivateElements => Command::Activate {
-          mode: NavigationMode::Elements,
-        },
-        DesktopAction::ActivateFreestyle => Command::Activate {
-          mode: NavigationMode::Freestyle,
-        },
-        DesktopAction::Deactivate => Command::Deactivate,
-        DesktopAction::Quit => Command::Quit,
-        DesktopAction::OpenConfig => {
-          self.open_config()?;
-          continue;
-        }
-        DesktopAction::Help => {
-          self.open_help()?;
-          continue;
-        }
-      };
-      if let Err(error) = self.execute(command) {
-        tracing::error!(%error, "Menu action failed");
-      }
+    if let Some(desktop) = self.desktop.as_mut() {
+      desktop.pump();
     }
     for _ in 0..256 {
       let event = match self.listener.as_mut() {
@@ -631,37 +603,6 @@ impl Runtime {
         tracing::info!("Display layout or focused window changed; navigation cancelled");
       }
     }
-    Ok(())
-  }
-
-  fn open_config(&self) -> Result<()> {
-    if !self.config_path.exists() {
-      if let Some(parent) = self.config_path.parent() {
-        std::fs::create_dir_all(parent)?;
-      }
-      use std::io::Write;
-      let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&self.config_path)?;
-      file.write_all(toml::to_string_pretty(&self.config)?.as_bytes())?;
-    }
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-      .args(["-t"])
-      .arg(&self.config_path)
-      .spawn()?;
-    Ok(())
-  }
-
-  fn open_help(&self) -> Result<()> {
-    let path = self.config_path.with_file_name("help.txt");
-    std::fs::write(
-      &path,
-      "Kact\n\nUse `kact --help` for commands.\nActivate Grid or Elements, then type a label to move.\nArrow keys nudge; Alt+arrows move farther; Cmd+arrows jump to edges.\nEnter clicks, = begins a drag, Enter drops, \\ double-clicks.\n[ middle-clicks, ] right-clicks; Shift+arrows scroll.\nEscape clears a label or exits. Cmd+H hides.\nPreferences opens your TOML config.\n",
-    )?;
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open").args(["-t"]).arg(path).spawn()?;
     Ok(())
   }
 }

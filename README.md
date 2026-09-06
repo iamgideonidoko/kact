@@ -5,7 +5,7 @@ Control the cursor from your keyboard or shell. Written in Rust, with native mac
 - Grid labels and accessibility element labels jump directly to targets.
 - Freestyle mode provides movement without an overlay.
 - Click, double/triple-click, drag, scroll, and jump to screen edges or corners.
-- Multiple displays, configurable appearance, system/Emacs/vi controls, and a menu bar.
+- Multiple displays, configurable appearance, and system/Emacs/vi controls.
 - TOML configuration with validation and automatic reload.
 - Global shortcuts are **disabled by default**. External shortcut tools can invoke every action through the CLI.
 
@@ -24,14 +24,6 @@ kact activate grid
 Grant **Accessibility** permission when prompted in System Settings → Privacy & Security, then retry `kact start`. If keyboard capture is denied, check Input Monitoring too. `kact doctor` checks configuration, permission, and service availability without moving the cursor.
 
 `start` creates a default user config if needed and launches one background instance. It is safe to repeat. Logs are saved beside the config as `kact.log`. Use `kact daemon` for foreground logs or `kact quit` to stop.
-
-For a menu-bar app (Python 3.11+):
-
-```sh
-python3 scripts/bundle_macos.py
-```
-
-Move `target/Kact.app` to Applications and open it. The script signs locally by default; set `KACT_SIGN_IDENTITY` for Developer ID signing. Distribution still requires notarization. The bundled CLI is `Kact.app/Contents/MacOS/kact`; add a symlink to it on `PATH` if needed. Keep the executable at a stable path so its permission and login-startup entries remain valid.
 
 ```sh
 kact service install      # enable startup at the next login
