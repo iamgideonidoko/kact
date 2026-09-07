@@ -1,10 +1,12 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import mermaid from 'astro-mermaid';
 
 export default defineConfig({
   site: 'https://iamgideonidoko.github.io',
   base: '/kact',
   integrations: [
+    mermaid({ autoTheme: true, enableLog: false }),
     starlight({
       title: 'Kact',
       description: 'Documentation for Kact, a keyboard-driven cursor actuator for macOS and X11.',
