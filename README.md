@@ -99,7 +99,7 @@ Normal typing is untouched while navigation is inactive. Explicit activation ena
 | Cmd+Shift+= / Cmd+Shift+- | Increase / decrease cell size             |
 | Cmd+= / Cmd+-             | Increase / decrease contrast              |
 
-System controls include Emacs movement shortcuts. Set `keybindings.preset = "vi"` for H/J/K/L movement, Ctrl+H/J/K/L larger steps, Shift+H/J/K/L edges, Shift+M center/corners, and Ctrl+B/F/I/A scrolling. Keys reserved by local bindings are removed from the label alphabet so targets remain reachable.
+The default `keybindings.preset = "vi"` uses H/J/K/L movement, Ctrl+H/J/K/L larger steps, Shift+H/J/K/L edges, Shift+M center/corners, and Ctrl+B/F/I/A scrolling. Set `keybindings.preset = "emacs"` for Ctrl+P/N/B/F movement, Alt+A/E/B/F larger steps, Ctrl+A/E edges, Ctrl+L center/corners, and Shift+P/N/B/F scrolling. Keys reserved by local bindings are removed from the label alphabet so targets remain reachable.
 
 ## Configuration
 
@@ -117,7 +117,7 @@ Optional global shortcuts:
 [keybindings]
 enabled = true
 navigation_enabled = true
-preset = "system"
+preset = "vi"
 
 [keybindings.global]
 "ctrl+alt+g" = "activate grid"

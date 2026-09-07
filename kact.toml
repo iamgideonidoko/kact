@@ -17,7 +17,7 @@ fast_multiplier = 2.5
 enabled = false
 # Keys are captured only during explicitly activated navigation.
 navigation_enabled = true
-preset = "system"
+preset = "vi"
 
 [keybindings.global]
 # "ctrl+alt+g" = "activate grid"

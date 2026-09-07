@@ -53,7 +53,7 @@ impl Default for KeyBindings {
     Self {
       enabled: false,
       navigation_enabled: true,
-      preset: "system".into(),
+      preset: "vi".into(),
       global: HashMap::new(),
       local: HashMap::new(),
     }
@@ -196,8 +196,8 @@ impl Config {
     if !["error", "warn", "info", "debug", "trace", "off"].contains(&self.system.log_level.as_str()) {
       return Err(invalid("invalid system.log_level"));
     }
-    if !["system", "emacs", "vi"].contains(&self.keybindings.preset.as_str()) {
-      return Err(invalid("keybindings.preset must be system, emacs, or vi"));
+    if !["emacs", "vi"].contains(&self.keybindings.preset.as_str()) {
+      return Err(invalid("keybindings.preset must be emacs or vi"));
     }
     for (key, action) in self.keybindings.global.iter().chain(self.keybindings.local.iter()) {
       if key.trim().is_empty() || action.trim().is_empty() {
@@ -215,5 +215,25 @@ impl Config {
       .map(PathBuf::from)
       .unwrap_or_else(|| PathBuf::from("."))
       .join(".config/kact/kact.toml")
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::Config;
+
+  #[test]
+  fn only_vi_and_emacs_presets_are_valid() {
+    let config = Config::default();
+    assert_eq!(config.keybindings.preset, "vi");
+    assert!(config.validate().is_ok());
+
+    let mut emacs = config.clone();
+    emacs.keybindings.preset = "emacs".into();
+    assert!(emacs.validate().is_ok());
+
+    let mut removed = config;
+    removed.keybindings.preset = "system".into();
+    assert!(removed.validate().is_err());
   }
 }
