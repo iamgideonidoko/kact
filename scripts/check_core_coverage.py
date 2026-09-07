@@ -5,8 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-# Measured baseline on Rust 1.88.0. Raise this as the core test suite grows.
-MINIMUM = 89.0
+MINIMUM = 100.0
 CORE = Path("src/core")
 
 

@@ -1,6 +1,6 @@
 use kact::config::Config;
 use kact::core::types::Vector2D;
-use kact::core::{AppState, Direction, MotionEngine};
+use kact::core::{AppState, Direction, InputState, Mode, MotionEngine};
 
 #[test]
 fn test_config_loading() {
@@ -149,4 +149,74 @@ fn grid_labels_span_screens_and_filter_without_ambiguous_prefixes() {
   assert_eq!(labels.iter().collect::<std::collections::HashSet<_>>().len(), 1000);
   assert!(labels.iter().all(|label| label.len() == labels[0].len()));
   assert!(Navigation::grid(&screens, 0, 2, "ab").is_err());
+}
+
+#[test]
+fn core_edge_cases_are_safe() {
+  use kact::core::navigation::{Navigation, labels};
+  use kact::desktop::Rect;
+
+  let mut input = InputState::new();
+  for direction in [Direction::Up, Direction::Down, Direction::Left, Direction::Right] {
+    input.press_direction(direction);
+  }
+  input.release_direction(Direction::Down);
+  input.set_mode(Mode::Precise);
+  assert!(input.get_input_vector().magnitude() > 0.0);
+  input.set_mode(Mode::Fast);
+
+  let mut state = AppState::new();
+  state.toggle_active();
+  state.trigger_emergency_stop();
+  assert!(state.emergency_stop && !state.active);
+
+  let mut config = Config::default();
+  config.motion.friction = 0.0;
+  let mut engine = MotionEngine::new(config.motion.clone());
+  engine.update_config(config.motion.clone());
+  engine.update_modes(config.modes.clone());
+  state.active = true;
+  state.emergency_stop = false;
+  state.velocity = Vector2D::new(0.005, 0.0);
+  assert_eq!(engine.tick(&state, 0.1), (Vector2D::zero(), Vector2D::zero()));
+
+  config.motion.friction = 0.95;
+  engine.update_config(config.motion.clone());
+  assert_eq!(engine.tick(&state, 0.1).0, Vector2D::zero());
+  config.motion.acceleration = 0.5;
+  let mut modes = config.modes;
+  modes.precise_multiplier = 0.5;
+  engine.update_config(config.motion.clone());
+  engine.update_modes(modes);
+  state.input = InputState::new();
+  state.input.set_mode(Mode::Precise);
+  state.input.press_direction(Direction::Right);
+  state.velocity = Vector2D::new(config.motion.max_speed * 0.5, 0.0);
+  assert_eq!(engine.tick(&state, 0.1).0, state.velocity);
+
+  assert!(labels(100_001, "ab").is_err());
+  assert!(labels(1, "a").is_err());
+  assert!(
+    Navigation::from_rects(
+      &[Rect {
+        x: 0.0,
+        y: 0.0,
+        width: 0.0,
+        height: 1.0
+      }],
+      "ab"
+    )
+    .is_err()
+  );
+  let mut navigation = Navigation::from_rects(
+    &[Rect {
+      x: 0.0,
+      y: 0.0,
+      width: 1.0,
+      height: 1.0,
+    }],
+    "ab",
+  )
+  .unwrap();
+  assert!(navigation.type_char('1').is_none());
 }

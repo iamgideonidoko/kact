@@ -17,7 +17,7 @@ Install the local reporter once with:
 mise exec rust@1.88.0 -- cargo install cargo-llvm-cov --locked
 ```
 
-`make coverage` opens an HTML report. `make coverage-core` checks line coverage for `src/core/`; the current CI floor is 89% and should rise with new tests.
+`make coverage` opens an HTML report. `make coverage-core` checks line coverage for `src/core/`; CI requires 100% line coverage.
 
 Run both smoke checks after changing overlays, accessibility, input capture, pointer injection, or the runtime code that connects them. They require a macOS desktop and Accessibility permission; `smoke-mouse` also needs Xcode command-line tools.
 
