@@ -1,0 +1,44 @@
+---
+title: Kact documentation
+description: Control the cursor from your keyboard or shell.
+template: splash
+hero:
+  title: Kact
+  tagline: A keyboard-driven cursor actuator for macOS and X11.
+  image:
+    html: '<img class="kact-hero-logo" src="kact.svg" alt="Kact cursor logo">'
+  actions:
+    - text: Get started
+      link: /getting-started/introduction/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/iamgideonidoko/kact
+      icon: external
+---
+
+Kact exposes pointer actions through a local daemon and CLI. Use its native macOS navigation overlays, or call commands from shells and keyboard remappers.
+
+```sh
+mise install
+cargo install --path .
+kact start
+kact activate grid
+```
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Getting started" icon="rocket" href="/getting-started/quick-start/">Install Kact, grant required permissions, and make the first cursor action.</Card>
+  <Card title="Configuration" icon="setting" href="/configuration/overview/">Configure motion, appearance, runtime behavior, and optional bindings.</Card>
+  <Card title="CLI reference" icon="document" href="/reference/cli/">Every command, argument, and global flag.</Card>
+  <Card title="External integrations" icon="puzzle" href="/guides/external-integrations/">Use Hammerspoon, Karabiner-Elements, or Kanata as the keybinding layer.</Card>
+</CardGrid>
+
+## Platform support
+
+| Platform | Status |
+| --- | --- |
+| macOS | Native overlays, accessibility targeting, keyboard capture, shell actions, and modified clicks. |
+| Linux X11 | Shell-driven pointer actions. Bind commands from the window manager or another shortcut tool. |
+| Wayland | Unsupported by the native backend. |
+| Windows | Unsupported. |

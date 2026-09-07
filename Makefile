@@ -1,7 +1,7 @@
 APP := kact
 CARGO := cargo
 
-.PHONY: help build release run run-release fmt clippy clippy-warn test check doc clean install lint \
+.PHONY: help build release run run-release fmt clippy clippy-warn test check doc clean install lint docs docs-build docs-preview \
 	config-init doctor daemon start status grid elements freestyle deactivate stop quit reload smoke smoke-mouse
 
 help:
@@ -32,6 +32,9 @@ help:
 	@printf "  make smoke-mouse    - Run native mouse/keyboard smoke check\n"
 	@printf "  make clean          - Clean build artifacts\n"
 	@printf "  make install        - Install the binary locally (cargo install --path .)\n"
+	@printf "  make docs           - Run the documentation site locally\n"
+	@printf "  make docs-build     - Build the documentation site\n"
+	@printf "  make docs-preview   - Preview the built documentation site\n"
 
 build:
 	$(CARGO) build
@@ -69,6 +72,15 @@ clean:
 
 install:
 	$(CARGO) install --path .
+
+docs:
+	pnpm --dir docs run dev
+
+docs-build:
+	pnpm --dir docs run build
+
+docs-preview:
+	pnpm --dir docs run preview
 
 lint: fmt clippy
 	@printf "Ran fmt and clippy\n"

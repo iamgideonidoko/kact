@@ -5,5 +5,4 @@
 - Keep configuration backward compatible unless a documented breaking change is intended.
 - Run `make lint` and `make test` after Rust changes. Run macOS smoke checks for native input, overlay, or accessibility changes.
 - Do not add dependencies, platform support, or user-facing features without a concrete need.
-- Update the README and relevant `docs/` page when behavior, configuration, or supported platforms change.
-
+- Update the README and relevant `docs/src/content/docs/` page when behavior, configuration, or supported platforms change.

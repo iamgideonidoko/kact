@@ -1,0 +1,142 @@
+/* Palette sampled from kact.svg: graphite #363b3f/#4d5358/#555b60 and silver #c6ccd2/#d7dce0/#e9ecef. */
+:root {
+  --sl-color-accent-low: #d7dce0;
+  --sl-color-accent: #4d5358;
+  --sl-color-accent-high: #363b3f;
+  --sl-font-system:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sl-font-system-mono:
+    "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+:root[data-theme="dark"] {
+  --sl-color-black: #111315;
+  --sl-color-gray-7: #181b1e;
+  --sl-color-gray-6: #22272b;
+  --sl-color-gray-5: #363b3f;
+  --sl-color-gray-4: #555b60;
+  --sl-color-gray-3: #9ba3aa;
+  --sl-color-gray-2: #d7dce0;
+  --sl-color-gray-1: #f7f8f9;
+  --sl-color-accent-low: #363b3f;
+  --sl-color-accent: #c6ccd2;
+  --sl-color-accent-high: #ffffff;
+}
+
+body {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--sl-color-gray-5) 22%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--sl-color-gray-5) 22%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 2rem 2rem;
+}
+
+header.header {
+  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--sl-color-bg-nav) 88%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--sl-color-gray-5) 65%, transparent);
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  margin-block: 1rem 2rem;
+  padding: clamp(2rem, 6vw, 4.5rem) clamp(1.5rem, 5vw, 4rem);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.8rem;
+  background: var(--sl-color-gray-7);
+  box-shadow: 0 1.5rem 4rem color-mix(in srgb, #000 18%, transparent);
+}
+
+.hero::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.32;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 18px,
+    color-mix(in srgb, var(--sl-color-gray-4) 18%, transparent) 19px 20px
+  );
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+.hero .header {
+  border: 0;
+  background: none;
+  backdrop-filter: none;
+}
+.hero h1 {
+  letter-spacing: -0.055em;
+}
+.kact-hero-logo {
+  width: min(20rem, 36vw);
+  filter: drop-shadow(0 1.5rem 1.25rem color-mix(in srgb, #000 28%, transparent));
+}
+
+.card {
+  border-radius: 0.9rem;
+  border-color: var(--sl-color-gray-5);
+  background: color-mix(
+    in srgb,
+    var(--sl-color-bg) 92%,
+    var(--sl-color-gray-7)
+  );
+  transition:
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--sl-color-accent);
+  box-shadow: 0 0.7rem 1.8rem color-mix(in srgb, #000 13%, transparent);
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  border: 1px solid var(--sl-color-gray-4);
+  border-bottom-color: var(--sl-color-gray-5);
+  border-radius: 0.32rem;
+  padding: 0.08rem 0.32rem;
+  background: linear-gradient(
+    180deg,
+    var(--sl-color-gray-2),
+    var(--sl-color-gray-3)
+  );
+  box-shadow:
+    inset 0 1px color-mix(in srgb, #fff 55%, transparent),
+    0 1px 1px color-mix(in srgb, #000 25%, transparent);
+  color: #202428;
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.82em;
+  text-align: center;
+}
+
+:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 50rem) {
+  body {
+    background-size: 1.5rem 1.5rem;
+  }
+  .hero {
+    border-radius: 0.9rem;
+  }
+}

@@ -182,8 +182,8 @@ Per-app profiles, macros, and a graphical config editor are later extensions.
 ## Project documentation
 
 - [Contributing](CONTRIBUTING.md), [security policy](SECURITY.md), and [changelog](CHANGELOG.md)
-- [Architecture](docs/architecture.md), [development](docs/development.md), and [testing](docs/testing.md)
-- [Architecture decisions](docs/decisions/README.md)
+- [Documentation site](https://iamgideonidoko.github.io/kact/) for installation, configuration, CLI reference, troubleshooting, and contributor guides
+- [Documentation source](docs/) for local preview and documentation changes
 
 ## License
 
