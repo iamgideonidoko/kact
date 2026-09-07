@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{Result, desktop::LabelPosition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -182,6 +182,7 @@ pub struct AppearanceConfig {
   pub highlight: String,
   pub opacity: f64,
   pub grid_lines: bool,
+  pub label_position: LabelPosition,
   pub grid: AppearanceOverride,
   pub elements: AppearanceOverride,
 }
@@ -194,6 +195,7 @@ impl Default for AppearanceConfig {
       highlight: "#FFD166".into(),
       opacity: 0.85,
       grid_lines: true,
+      label_position: LabelPosition::Center,
       grid: AppearanceOverride::default(),
       elements: AppearanceOverride::default(),
     }
@@ -209,6 +211,7 @@ pub struct AppearanceOverride {
   pub highlight: Option<String>,
   pub opacity: Option<f64>,
   pub grid_lines: Option<bool>,
+  pub label_position: Option<LabelPosition>,
 }
 
 impl AppearanceConfig {
@@ -229,6 +232,7 @@ impl AppearanceConfig {
         .unwrap_or_else(|| self.highlight.clone()),
       opacity: override_config.opacity.unwrap_or(self.opacity),
       grid_lines: override_config.grid_lines.unwrap_or(self.grid_lines),
+      label_position: override_config.label_position.unwrap_or(self.label_position),
       grid: AppearanceOverride::default(),
       elements: AppearanceOverride::default(),
     }
@@ -368,6 +372,7 @@ mod tests {
       grid_lines = false
       [appearance.elements]
       opacity = 0.5
+      label_position = "top-left"
       "##,
     )
     .unwrap();
@@ -377,5 +382,9 @@ mod tests {
     assert!(config.navigation.for_elements().auto_click);
     assert!(!config.appearance.for_grid().grid_lines);
     assert_eq!(config.appearance.for_elements().opacity, 0.5);
+    assert_eq!(
+      config.appearance.for_elements().label_position,
+      crate::desktop::LabelPosition::TopLeft
+    );
   }
 }

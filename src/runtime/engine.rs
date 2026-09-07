@@ -224,6 +224,7 @@ impl Runtime {
           highlight: a.highlight.clone(),
           opacity: a.opacity,
           grid_lines: a.grid_lines,
+          label_position: a.label_position,
         };
         let mut targets = navigation.visible();
         if !self.labels_visible {

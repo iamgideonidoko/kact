@@ -1,5 +1,22 @@
 //! Native desktop presentation. All methods must be called on the main thread.
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LabelPosition {
+  #[default]
+  Center,
+  Top,
+  Right,
+  Bottom,
+  Left,
+  TopLeft,
+  TopRight,
+  BottomLeft,
+  BottomRight,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect {
   pub x: f64,
@@ -22,6 +39,7 @@ pub struct Appearance {
   pub highlight: String,
   pub opacity: f64,
   pub grid_lines: bool,
+  pub label_position: LabelPosition,
 }
 
 impl Default for Appearance {
@@ -33,6 +51,7 @@ impl Default for Appearance {
       highlight: "#F5C451".into(),
       opacity: 0.85,
       grid_lines: true,
+      label_position: LabelPosition::Center,
     }
   }
 }

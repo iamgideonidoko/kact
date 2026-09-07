@@ -50,6 +50,47 @@ unsafe fn color(hex: &str, alpha: f64) -> id {
   }
 }
 
+fn label_origin(cell: NSRect, size: NSSize, position: LabelPosition) -> NSPoint {
+  let center = || {
+    NSPoint::new(
+      cell.origin.x + (cell.size.width - size.width) / 2.0,
+      cell.origin.y + (cell.size.height - size.height) / 2.0,
+    )
+  };
+  if position == LabelPosition::Center || cell.size.width < size.width + 8.0 || cell.size.height < size.height + 4.0 {
+    return center();
+  }
+  match position {
+    LabelPosition::Center => center(),
+    LabelPosition::Top => NSPoint::new(
+      cell.origin.x + (cell.size.width - size.width) / 2.0,
+      cell.origin.y + cell.size.height - size.height - 2.0,
+    ),
+    LabelPosition::Right => NSPoint::new(
+      cell.origin.x + cell.size.width - size.width - 4.0,
+      cell.origin.y + (cell.size.height - size.height) / 2.0,
+    ),
+    LabelPosition::Bottom => NSPoint::new(
+      cell.origin.x + (cell.size.width - size.width) / 2.0,
+      cell.origin.y + 2.0,
+    ),
+    LabelPosition::Left => NSPoint::new(
+      cell.origin.x + 4.0,
+      cell.origin.y + (cell.size.height - size.height) / 2.0,
+    ),
+    LabelPosition::TopLeft => NSPoint::new(
+      cell.origin.x + 4.0,
+      cell.origin.y + cell.size.height - size.height - 2.0,
+    ),
+    LabelPosition::TopRight => NSPoint::new(
+      cell.origin.x + cell.size.width - size.width - 4.0,
+      cell.origin.y + cell.size.height - size.height - 2.0,
+    ),
+    LabelPosition::BottomLeft => NSPoint::new(cell.origin.x + 4.0, cell.origin.y + 2.0),
+    LabelPosition::BottomRight => NSPoint::new(cell.origin.x + cell.size.width - size.width - 4.0, cell.origin.y + 2.0),
+  }
+}
+
 extern "C" fn can_become_key(_: &Object, _: Sel) -> cocoa::base::BOOL {
   NO
 }
@@ -107,10 +148,7 @@ extern "C" fn draw(this: &Object, _: Sel, _: NSRect) {
         let _: () = msg_send![label, addAttributes: prefix_attributes range: range];
       }
       let size: NSSize = msg_send![label, size];
-      let origin = NSPoint::new(
-        cell.origin.x + (cell.size.width - size.width) / 2.0,
-        cell.origin.y + (cell.size.height - size.height) / 2.0,
-      );
+      let origin = label_origin(cell, size, a.label_position);
       let plate = NSRect::new(
         NSPoint::new(origin.x - 4.0, origin.y - 2.0),
         NSSize::new(size.width + 8.0, size.height + 4.0),
@@ -610,5 +648,23 @@ mod tests {
       },
       screen
     ));
+  }
+  #[test]
+  fn label_positions_stay_inside_large_targets_and_center_small_ones() {
+    fn assert_point(point: NSPoint, x: f64, y: f64) {
+      assert_eq!((point.x, point.y), (x, y));
+    }
+    let cell = NSRect::new(NSPoint::new(10.0, 20.0), NSSize::new(100.0, 60.0));
+    let size = NSSize::new(20.0, 10.0);
+    assert_point(label_origin(cell, size, LabelPosition::Top), 50.0, 68.0);
+    assert_point(label_origin(cell, size, LabelPosition::Right), 86.0, 45.0);
+    assert_point(label_origin(cell, size, LabelPosition::Bottom), 50.0, 22.0);
+    assert_point(label_origin(cell, size, LabelPosition::Left), 14.0, 45.0);
+    assert_point(label_origin(cell, size, LabelPosition::TopLeft), 14.0, 68.0);
+    assert_point(label_origin(cell, size, LabelPosition::TopRight), 86.0, 68.0);
+    assert_point(label_origin(cell, size, LabelPosition::BottomLeft), 14.0, 22.0);
+    assert_point(label_origin(cell, size, LabelPosition::BottomRight), 86.0, 22.0);
+    let small = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(20.0, 10.0));
+    assert_point(label_origin(small, size, LabelPosition::TopLeft), 0.0, 0.0);
   }
 }
