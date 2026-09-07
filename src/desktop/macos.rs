@@ -26,7 +26,11 @@ struct OverlayData {
 }
 struct Overlay {
   window: id,
-  _data: Box<OverlayData>,
+  screen: Rect,
+}
+
+unsafe fn overlay_data(view: id) -> *mut OverlayData {
+  unsafe { (*(*view).get_ivar::<*mut std::ffi::c_void>("kactData")).cast() }
 }
 
 /// Owns AppKit objects; intentionally neither Send nor Sync.
@@ -49,9 +53,21 @@ unsafe fn color(hex: &str, alpha: f64) -> id {
 extern "C" fn can_become_key(_: &Object, _: Sel) -> cocoa::base::BOOL {
   NO
 }
+extern "C" fn dealloc(this: &mut Object, _: Sel) {
+  unsafe {
+    let data = (*this.get_ivar::<*mut std::ffi::c_void>("kactData")).cast::<OverlayData>();
+    if !data.is_null() {
+      drop(Box::from_raw(data));
+      this.set_ivar("kactData", std::ptr::null_mut::<std::ffi::c_void>());
+    }
+    let _: () = msg_send![super(this, class!(NSView)), dealloc];
+  }
+}
 extern "C" fn draw(this: &Object, _: Sel, _: NSRect) {
   unsafe {
-    let data = &*(*this.get_ivar::<*const std::ffi::c_void>("kactData")).cast::<OverlayData>();
+    let Some(data) = overlay_data(this as *const Object as id).as_ref() else {
+      return;
+    };
     let a = &data.appearance;
     for target in &data.targets {
       if !label_matches(&target.label, &data.prefix) {
@@ -113,8 +129,9 @@ fn register_classes() {
   static ONCE: Once = Once::new();
   ONCE.call_once(|| unsafe {
     let mut view = ClassDecl::new("KactOverlayView", class!(NSView)).unwrap();
-    view.add_ivar::<*const std::ffi::c_void>("kactData");
+    view.add_ivar::<*mut std::ffi::c_void>("kactData");
     view.add_method(sel!(drawRect:), draw as extern "C" fn(&Object, Sel, NSRect));
+    view.add_method(sel!(dealloc), dealloc as extern "C" fn(&mut Object, Sel));
     view.register();
     let mut panel = ClassDecl::new("KactOverlayPanel", class!(NSPanel)).unwrap();
     panel.add_method(
@@ -198,18 +215,22 @@ impl Desktop {
         .overlays
         .iter()
         .zip(&screens)
-        .all(|(overlay, screen)| overlay._data.screen == *screen)
+        .all(|(overlay, screen)| overlay.screen == *screen)
     {
       for overlay in &mut self.overlays {
-        overlay._data.targets = targets
+        let view: id = unsafe { msg_send![overlay.window, contentView] };
+        let data = unsafe { overlay_data(view).as_mut() };
+        let Some(data) = data else {
+          continue;
+        };
+        data.targets = targets
           .iter()
-          .filter(|target| intersects(target.bounds, overlay._data.screen))
+          .filter(|target| intersects(target.bounds, data.screen))
           .cloned()
           .collect();
-        overlay._data.prefix = prefix.to_owned();
-        overlay._data.appearance = appearance.clone();
+        data.prefix = prefix.to_owned();
+        data.appearance = appearance.clone();
         unsafe {
-          let view: id = msg_send![overlay.window, contentView];
           let _: () = msg_send![view, setNeedsDisplay: YES];
         }
       }
@@ -239,7 +260,7 @@ impl Desktop {
         let _: () = msg_send![window, setHidesOnDeactivate: NO];
         let _: () = msg_send![window, setLevel: 25isize];
         let _: () = msg_send![window, setCollectionBehavior: (1usize | 16 | 256)];
-        let data = Box::new(OverlayData {
+        let data = Box::into_raw(Box::new(OverlayData {
           targets: targets
             .iter()
             .filter(|t| intersects(t.bounds, screen))
@@ -248,14 +269,14 @@ impl Desktop {
           prefix: prefix.to_owned(),
           appearance: appearance.clone(),
           screen,
-        });
+        }));
         let view: id = msg_send![Class::get("KactOverlayView").unwrap(), alloc];
         let view: id = msg_send![view, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), frame.size)];
-        (*view).set_ivar("kactData", (&*data as *const OverlayData).cast::<std::ffi::c_void>());
+        (*view).set_ivar("kactData", data.cast::<std::ffi::c_void>());
         let _: () = msg_send![window, setContentView: view];
         let _: () = msg_send![view, release];
         let _: () = msg_send![window, orderFrontRegardless];
-        self.overlays.push(Overlay { window, _data: data });
+        self.overlays.push(Overlay { window, screen });
       }
       pool.drain();
     }
