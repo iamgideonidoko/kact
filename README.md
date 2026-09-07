@@ -5,7 +5,7 @@ Control the cursor from your keyboard or shell. Written in Rust, with native mac
 - Grid labels and accessibility element labels jump directly to targets.
 - Freestyle mode provides movement without an overlay.
 - Click, double/triple-click, drag, scroll, and jump to screen edges or corners.
-- Multiple displays, configurable appearance, and system/Emacs/vi controls.
+- Multiple displays, configurable appearance, and vi/Emacs controls.
 - TOML configuration with validation and automatic reload.
 - Global shortcuts are **disabled by default**. External shortcut tools can invoke every action through the CLI.
 
@@ -177,6 +177,12 @@ Remaining release gates:
 - [ ] Validate X11 behavior separately; native Wayland and Windows need dedicated implementations.
 
 Per-app profiles, macros, and a graphical config editor are later extensions.
+
+## Project documentation
+
+- [Contributing](CONTRIBUTING.md), [security policy](SECURITY.md), and [changelog](CHANGELOG.md)
+- [Architecture](docs/architecture.md), [development](docs/development.md), and [testing](docs/testing.md)
+- [Architecture decisions](docs/decisions/README.md)
 
 ## License
 
