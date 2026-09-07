@@ -1,5 +1,6 @@
 # Run `kact config init` to create your user configuration.
 [motion]
+# Acceleration curve: linear, sigmoid, or exponential.
 curve_type = "sigmoid"
 max_speed = 2000.0
 acceleration = 0.8

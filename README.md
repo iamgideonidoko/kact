@@ -13,9 +13,10 @@ macOS is the primary platform. Linux X11 supports shell-driven mouse actions; na
 
 ## Quick start
 
-Install Rust 1.88 or newer:
+Install the pinned Rust 1.88.0 toolchain:
 
 ```sh
+mise install
 cargo install --path .
 kact start
 kact activate grid
@@ -67,13 +68,14 @@ kact show labels           # toggle labels
 kact show larger           # larger cells; also: smaller
 kact show more-contrast    # also: less-contrast
 kact reload
+kact doctor
 kact status
 kact quit
 ```
 
 Clicking exits navigation. Clicking a held button drops it without an extra click. Deactivation, shutdown, and fatal input failures release held buttons. `stop` leaves an existing navigation overlay active; `deactivate` also hides it.
 
-Commands return JSON and a nonzero exit status on failure. Continuous movement commands do not activate keyboard capture. Send press/release commands in order; the Hammerspoon example serializes them. `scroll` uses pixels on macOS and wheel steps on X11. Coordinates use screen points on macOS, with `(0, 0)` at the primary display's top-left; other displays may have negative coordinates.
+Actions sent to the running daemon return JSON and a nonzero exit status on failure. Setup and configuration commands print human-readable results. Continuous movement commands do not activate keyboard capture. Send press/release commands in order; the Hammerspoon example serializes them. `scroll` uses pixels on macOS and wheel steps on X11. Coordinates use screen points on macOS, with `(0, 0)` at the primary display's top-left; other displays may have negative coordinates.
 
 All commands accept `--config PATH` and `--socket PATH`; these identify the daemon's configuration at startup and its private socket respectively. Use the same `--socket` for clients of a custom instance. `--config` on a client does not switch a running daemon's config. Socket parent directories must be owned by you with mode `0700`.
 
@@ -89,7 +91,6 @@ Normal typing is untouched while navigation is inactive. Explicit activation ena
 | Cmd+H                     | Hide navigation                           |
 | Arrows / Alt+arrows       | Move 10 / 100 points                      |
 | Cmd+arrows                | Jump to screen edges                      |
-| Ctrl+L                    | Center, then cycle through corners        |
 | Enter                     | Click or drop a drag                      |
 | `=` / `\`                 | Begin drag / double-click                 |
 | `[` / `]`                 | Middle / right click                      |
@@ -136,7 +137,7 @@ enabled = false
 navigation_enabled = false
 ```
 
-Movement settings control speed, acceleration, friction, frame rate, and normal/precise/fast multipliers. Navigation settings control rows, columns, label alphabet, and optional automatic clicking after selection. Appearance settings control font size, foreground/background/highlight colors, opacity, and grid lines.
+Movement settings control speed, acceleration, friction, frame rate, and normal/precise/fast multipliers. `motion.curve_type` controls acceleration toward target speed: `linear`, `sigmoid` (the default), or `exponential`. Releasing movement always uses exponential friction. Navigation settings control rows, columns, label alphabet, and optional automatic clicking after selection. Appearance settings control font size, foreground/background/highlight colors, opacity, and grid lines.
 
 Valid reloads apply atomically and exit navigation to clear held input. Invalid reloads retain the previous configuration. Atomic editor saves are supported. Logging changes reload too, unless overridden by `--log-level`. When automatic reload is disabled, use `kact reload` to apply changes.
 
@@ -163,7 +164,7 @@ python3 scripts/smoke_mouse_macos.py target/debug/kact
 
 The first native smoke check briefly shows overlays and starts keyboard capture without moving or clicking. The second opens a temporary test window, checks real mouse actions and keyboard suppression, then restores the cursor. Both require a macOS desktop and Accessibility permission; the second also requires the Xcode command-line tools.
 
-`src/core/` contains pure motion and label logic. `src/platform/` handles input and mouse injection. `src/desktop/` owns main-thread AppKit overlays and Accessibility discovery. `src/runtime/` applies shared actions from the CLI, menu, and optional bindings. `src/ipc.rs` provides a private, bounded Unix socket transport with single-instance locking.
+`src/core/` contains pure motion and label logic. `src/platform/` handles input and mouse injection. `src/desktop/` owns main-thread AppKit overlays and Accessibility discovery. `src/runtime/` applies shared actions from the CLI and optional bindings. `src/ipc.rs` provides a private, bounded Unix socket transport with single-instance locking.
 
 Automated tests cover config validation, movement timing, labels, state transitions, drag release, shortcut suppression, IPC framing/locking, and atomic reload. Native smoke checks cover grid/element presentation, keyboard suppression/passthrough, real clicks/drag/scroll, reload, and clean shutdown. CI is configured for macOS and Linux; Linux desktop behavior still needs verification.
 
