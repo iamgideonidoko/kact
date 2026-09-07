@@ -31,6 +31,14 @@ columns = 20
 alphabet = "asdfghjklqwertyuiopzxcvbnm"
 auto_click = false
 
+# Optional overrides inherit omitted fields from [navigation].
+[navigation.grid]
+# rows = 10
+# columns = 16
+
+[navigation.elements]
+# auto_click = true
+
 [appearance]
 font_size = 14.0
 foreground = "#FFFFFF"
@@ -38,6 +46,13 @@ background = "#17212B"
 highlight = "#FFD166"
 opacity = 0.85
 grid_lines = true
+
+# Optional overrides inherit omitted fields from [appearance].
+[appearance.grid]
+# grid_lines = true
+
+[appearance.elements]
+# grid_lines = false
 
 [system]
 hot_reload = true

@@ -128,6 +128,9 @@ impl Bindings {
       result.global = global;
       result.local.extend(local);
     }
+    for alphabet in config.navigation.alphabets() {
+      result.alphabet_for(&alphabet)?;
+    }
     Ok(result)
   }
 
@@ -140,9 +143,11 @@ impl Bindings {
   }
 
   pub fn alphabet(&self, config: &Config) -> Result<String> {
-    let alphabet: String = config
-      .navigation
-      .alphabet
+    self.alphabet_for(&config.navigation.alphabet)
+  }
+
+  pub fn alphabet_for(&self, configured: &str) -> Result<String> {
+    let alphabet: String = configured
       .chars()
       .filter(|c| !self.local.contains_key(&c.to_string()))
       .collect();

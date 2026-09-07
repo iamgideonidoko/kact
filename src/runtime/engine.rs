@@ -1,12 +1,12 @@
 use super::bindings::Bindings;
 use crate::command::{Button, Command, Heading, JumpTarget, NavigationMode, Presentation, Speed};
-use crate::config::Config;
+use crate::config::{AppearanceConfig, Config, NavigationConfig};
 use crate::core::{AppState, Direction, Mode, MotionEngine, Vector2D, navigation::Navigation};
 use crate::desktop::{Appearance, Desktop, Rect};
 use crate::platform::{self, CursorActuator, InputListener, InputOptions, KeyEvent, MouseButton};
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::{
   Arc,
@@ -26,6 +26,8 @@ pub struct Runtime {
   active: Arc<AtomicBool>,
   labels_active: Arc<AtomicBool>,
   mode: Option<NavigationMode>,
+  navigation_config: NavigationConfig,
+  appearance: AppearanceConfig,
   navigation: Option<Navigation>,
   selected: Option<Rect>,
   held_buttons: Vec<Button>,
@@ -45,6 +47,8 @@ impl Runtime {
     config.validate()?;
     let bindings = Bindings::new(&config)?;
     bindings.alphabet(&config)?;
+    let navigation_config = config.navigation.clone();
+    let appearance = config.appearance.clone();
     let cursor = platform::create_cursor_actuator()?;
     #[cfg(target_os = "macos")]
     let desktop = Some(Desktop::new()?);
@@ -62,6 +66,8 @@ impl Runtime {
       active: Arc::new(AtomicBool::new(false)),
       labels_active: Arc::new(AtomicBool::new(false)),
       mode: None,
+      navigation_config,
+      appearance,
       navigation: None,
       selected: None,
       held_buttons: Vec::new(),
@@ -92,7 +98,15 @@ impl Runtime {
       global_shortcuts: self.bindings.global.keys().cloned().collect(),
       navigation_keys: self.bindings.local.keys().cloned().collect(),
       label_keys: if self.config.keybindings.navigation_enabled {
-        self.config.navigation.alphabet.chars().map(|c| c.to_string()).collect()
+        self
+          .config
+          .navigation
+          .alphabets()
+          .iter()
+          .flat_map(|alphabet| alphabet.chars().map(|character| character.to_string()))
+          .collect::<BTreeSet<_>>()
+          .into_iter()
+          .collect()
       } else {
         vec![]
       },
@@ -116,7 +130,12 @@ impl Runtime {
     if !platform::accessibility_trusted(true) {
       bail!("Enable Accessibility for Kact in System Settings > Privacy & Security, then retry");
     }
-    let alphabet = self.bindings.alphabet(&self.config)?;
+    let mut navigation_config = match mode {
+      NavigationMode::Grid => self.config.navigation.for_grid(),
+      NavigationMode::Elements => self.config.navigation.for_elements(),
+      NavigationMode::Freestyle => self.config.navigation.clone(),
+    };
+    let mut alphabet = self.bindings.alphabet_for(&navigation_config.alphabet)?;
     let screens = if mode != NavigationMode::Freestyle {
       self.desktop()?.screens()?
     } else {
@@ -128,11 +147,11 @@ impl Runtime {
     } else {
       None
     };
-    let navigation = match mode {
+    let mut navigation = match mode {
       NavigationMode::Grid => Some(Navigation::grid(
         &screens,
-        self.config.navigation.rows,
-        self.config.navigation.columns,
+        navigation_config.rows,
+        navigation_config.columns,
         &alphabet,
       )?),
       NavigationMode::Elements => {
@@ -143,18 +162,23 @@ impl Runtime {
         if rectangles.is_empty() {
           actual_mode = NavigationMode::Grid;
           tracing::info!("No accessible targets; using grid navigation");
-          Some(Navigation::grid(
-            &screens,
-            self.config.navigation.rows,
-            self.config.navigation.columns,
-            &alphabet,
-          )?)
+          None
         } else {
           Some(Navigation::from_rects(&rectangles, &alphabet)?)
         }
       }
       NavigationMode::Freestyle => None,
     };
+    if actual_mode == NavigationMode::Grid && mode != NavigationMode::Grid {
+      navigation_config = self.config.navigation.for_grid();
+      alphabet = self.bindings.alphabet_for(&navigation_config.alphabet)?;
+      navigation = Some(Navigation::grid(
+        &screens,
+        navigation_config.rows,
+        navigation_config.columns,
+        &alphabet,
+      )?);
+    }
     if actual_mode == NavigationMode::Elements && self.desktop()?.focus_token().ok() != token {
       bail!("focused window changed during discovery; activate elements again");
     }
@@ -165,6 +189,12 @@ impl Runtime {
     self.navigation = navigation;
     self.screen_layout = screens;
     self.mode = Some(actual_mode);
+    self.navigation_config = navigation_config;
+    self.appearance = match actual_mode {
+      NavigationMode::Grid => self.config.appearance.for_grid(),
+      NavigationMode::Elements => self.config.appearance.for_elements(),
+      NavigationMode::Freestyle => self.config.appearance.clone(),
+    };
     self.focus_token = if actual_mode == NavigationMode::Elements {
       token
     } else {
@@ -186,7 +216,7 @@ impl Runtime {
   fn render(&mut self) -> Result<()> {
     if let Some(desktop) = self.desktop.as_mut() {
       if let Some(navigation) = &self.navigation {
-        let a = &self.config.appearance;
+        let a = &self.appearance;
         let appearance = Appearance {
           font_size: a.font_size,
           foreground: a.foreground.clone(),
@@ -353,31 +383,33 @@ impl Runtime {
           &[rectangle],
           3,
           3,
-          &self.bindings.alphabet(&self.config)?,
+          &self.bindings.alphabet_for(&self.navigation_config.alphabet)?,
         )?);
         self.selected = None;
         self.render()?;
       }
       Command::Show { setting } => {
         match setting {
-          Presentation::GridLines => self.config.appearance.grid_lines = !self.config.appearance.grid_lines,
+          Presentation::GridLines => self.appearance.grid_lines = !self.appearance.grid_lines,
           Presentation::Labels => self.labels_visible = !self.labels_visible,
-          Presentation::MoreContrast => {
-            self.config.appearance.opacity = (self.config.appearance.opacity + 0.1).min(1.0)
-          }
-          Presentation::LessContrast => {
-            self.config.appearance.opacity = (self.config.appearance.opacity - 0.1).max(0.1)
-          }
+          Presentation::MoreContrast => self.appearance.opacity = (self.appearance.opacity + 0.1).min(1.0),
+          Presentation::LessContrast => self.appearance.opacity = (self.appearance.opacity - 0.1).max(0.1),
           Presentation::Larger | Presentation::Smaller => {
             if setting == Presentation::Larger {
-              self.config.navigation.rows = self.config.navigation.rows.saturating_sub(1).max(1);
-              self.config.navigation.columns = self.config.navigation.columns.saturating_sub(1).max(1);
+              self.navigation_config.rows = self.navigation_config.rows.saturating_sub(1).max(1);
+              self.navigation_config.columns = self.navigation_config.columns.saturating_sub(1).max(1);
             } else {
-              self.config.navigation.rows = (self.config.navigation.rows + 1).min(100);
-              self.config.navigation.columns = (self.config.navigation.columns + 1).min(100);
+              self.navigation_config.rows = (self.navigation_config.rows + 1).min(100);
+              self.navigation_config.columns = (self.navigation_config.columns + 1).min(100);
             }
             if self.mode == Some(NavigationMode::Grid) {
-              self.activate(NavigationMode::Grid)?;
+              self.navigation = Some(Navigation::grid(
+                &self.screen_layout,
+                self.navigation_config.rows,
+                self.navigation_config.columns,
+                &self.bindings.alphabet_for(&self.navigation_config.alphabet)?,
+              )?);
+              self.selected = None;
             }
           }
         }
@@ -424,7 +456,7 @@ impl Runtime {
         if !current.contains(&rect) {
           self.navigation = Some(Navigation::from_rects(
             &current,
-            &self.bindings.alphabet(&self.config)?,
+            &self.bindings.alphabet_for(&self.navigation_config.alphabet)?,
           )?);
           self.render()?;
           bail!("targets changed; select a label from the refreshed overlay");
@@ -436,7 +468,7 @@ impl Runtime {
       self.selected = Some(rect);
     }
     self.navigation = Some(navigation);
-    if selected.is_some() && self.config.navigation.auto_click {
+    if selected.is_some() && self.navigation_config.auto_click {
       self.execute(Command::Click {
         button: Button::Left,
         count: 1,
@@ -679,6 +711,8 @@ mod tests {
   }
   fn runtime() -> (Runtime, Arc<Mutex<Output>>) {
     let config = Config::default();
+    let navigation_config = config.navigation.clone();
+    let appearance = config.appearance.clone();
     let output = Arc::new(Mutex::new(Output::default()));
     let runtime = Runtime {
       engine: MotionEngine::with_modes(config.motion.clone(), config.modes.clone()),
@@ -692,6 +726,8 @@ mod tests {
       active: Arc::new(AtomicBool::new(false)),
       labels_active: Arc::new(AtomicBool::new(false)),
       mode: None,
+      navigation_config,
+      appearance,
       navigation: None,
       selected: None,
       held_buttons: vec![],

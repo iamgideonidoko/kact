@@ -45,6 +45,14 @@ columns = 20            # 1..=100
 alphabet = "asdfghjklqwertyuiopzxcvbnm" # unique lowercase ASCII; at least 2 chars
 auto_click = false
 
+# Optional overrides inherit any omitted field from [navigation].
+[navigation.grid]
+rows = 10
+columns = 16
+
+[navigation.elements]
+auto_click = true
+
 [appearance]
 font_size = 14.0        # 8.0..=96.0
 foreground = "#FFFFFF" # #RRGGBB
@@ -53,11 +61,18 @@ highlight = "#FFD166"
 opacity = 0.85          # 0.1..=1.0
 grid_lines = true
 
+# Optional overrides inherit any omitted field from [appearance].
+[appearance.grid]
+grid_lines = true
+
+[appearance.elements]
+grid_lines = false
+
 [system]
 hot_reload = true
 log_level = "info"     # error | warn | info | debug | trace | off
 ```
 
-`auto_click` clicks after a completed target selection. `rows`, `columns`, and `alphabet` control grid labels. Appearance settings apply to macOS overlays. `target_fps` controls runtime polling while pointer motion is active.
+`auto_click` clicks after a completed target selection. `rows`, `columns`, and `alphabet` control grid labels. `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` are optional sparse overrides: each omitted field inherits its global value. Appearance settings apply to macOS overlays. `target_fps` controls runtime polling while pointer motion is active.
 
 See the [configuration implementation](https://github.com/iamgideonidoko/kact/blob/main/src/config.rs) for validation rules.

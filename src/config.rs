@@ -99,6 +99,8 @@ pub struct NavigationConfig {
   pub columns: usize,
   pub alphabet: String,
   pub auto_click: bool,
+  pub grid: NavigationOverride,
+  pub elements: NavigationOverride,
 }
 impl Default for NavigationConfig {
   fn default() -> Self {
@@ -107,7 +109,67 @@ impl Default for NavigationConfig {
       columns: 20,
       alphabet: "asdfghjklqwertyuiopzxcvbnm".into(),
       auto_click: false,
+      grid: NavigationOverride::default(),
+      elements: NavigationOverride::default(),
     }
+  }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct NavigationOverride {
+  pub rows: Option<usize>,
+  pub columns: Option<usize>,
+  pub alphabet: Option<String>,
+  pub auto_click: Option<bool>,
+}
+
+impl NavigationConfig {
+  fn resolve(&self, override_config: &NavigationOverride) -> Self {
+    Self {
+      rows: override_config.rows.unwrap_or(self.rows),
+      columns: override_config.columns.unwrap_or(self.columns),
+      alphabet: override_config
+        .alphabet
+        .clone()
+        .unwrap_or_else(|| self.alphabet.clone()),
+      auto_click: override_config.auto_click.unwrap_or(self.auto_click),
+      grid: NavigationOverride::default(),
+      elements: NavigationOverride::default(),
+    }
+  }
+
+  pub fn for_grid(&self) -> Self {
+    self.resolve(&self.grid)
+  }
+
+  pub fn for_elements(&self) -> Self {
+    self.resolve(&self.elements)
+  }
+
+  pub fn alphabets(&self) -> Vec<String> {
+    let mut result = vec![
+      self.alphabet.clone(),
+      self.for_grid().alphabet,
+      self.for_elements().alphabet,
+    ];
+    result.sort();
+    result.dedup();
+    result
+  }
+
+  fn validate(&self) -> Result<()> {
+    for (name, resolved) in [
+      ("navigation", self.clone()),
+      ("navigation.grid", self.for_grid()),
+      ("navigation.elements", self.for_elements()),
+    ] {
+      if !(1..=100).contains(&resolved.rows) || !(1..=100).contains(&resolved.columns) {
+        return Err(invalid(format!("{name} rows and columns must be within 1..=100")));
+      }
+      validate_alphabet(&resolved.alphabet)?;
+    }
+    Ok(())
   }
 }
 
@@ -120,6 +182,8 @@ pub struct AppearanceConfig {
   pub highlight: String,
   pub opacity: f64,
   pub grid_lines: bool,
+  pub grid: AppearanceOverride,
+  pub elements: AppearanceOverride,
 }
 impl Default for AppearanceConfig {
   fn default() -> Self {
@@ -130,7 +194,69 @@ impl Default for AppearanceConfig {
       highlight: "#FFD166".into(),
       opacity: 0.85,
       grid_lines: true,
+      grid: AppearanceOverride::default(),
+      elements: AppearanceOverride::default(),
     }
+  }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AppearanceOverride {
+  pub font_size: Option<f64>,
+  pub foreground: Option<String>,
+  pub background: Option<String>,
+  pub highlight: Option<String>,
+  pub opacity: Option<f64>,
+  pub grid_lines: Option<bool>,
+}
+
+impl AppearanceConfig {
+  fn resolve(&self, override_config: &AppearanceOverride) -> Self {
+    Self {
+      font_size: override_config.font_size.unwrap_or(self.font_size),
+      foreground: override_config
+        .foreground
+        .clone()
+        .unwrap_or_else(|| self.foreground.clone()),
+      background: override_config
+        .background
+        .clone()
+        .unwrap_or_else(|| self.background.clone()),
+      highlight: override_config
+        .highlight
+        .clone()
+        .unwrap_or_else(|| self.highlight.clone()),
+      opacity: override_config.opacity.unwrap_or(self.opacity),
+      grid_lines: override_config.grid_lines.unwrap_or(self.grid_lines),
+      grid: AppearanceOverride::default(),
+      elements: AppearanceOverride::default(),
+    }
+  }
+
+  pub fn for_grid(&self) -> Self {
+    self.resolve(&self.grid)
+  }
+
+  pub fn for_elements(&self) -> Self {
+    self.resolve(&self.elements)
+  }
+
+  fn validate(&self, range: impl Fn(&str, f64, f64, f64) -> Result<()>) -> Result<()> {
+    for (name, resolved) in [
+      ("appearance", self.clone()),
+      ("appearance.grid", self.for_grid()),
+      ("appearance.elements", self.for_elements()),
+    ] {
+      range(&format!("{name}.font_size"), resolved.font_size, 8.0, 96.0)?;
+      range(&format!("{name}.opacity"), resolved.opacity, 0.1, 1.0)?;
+      for color in [&resolved.foreground, &resolved.background, &resolved.highlight] {
+        if color.len() != 7 || !color.starts_with('#') || !color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit) {
+          return Err(invalid(format!("{name} colors must use #RRGGBB")));
+        }
+      }
+    }
+    Ok(())
   }
 }
 
@@ -178,21 +304,8 @@ impl Config {
     ] {
       range(&format!("modes.{name}_multiplier"), value, 0.01, 10.0)?;
     }
-    if !(1..=100).contains(&self.navigation.rows) || !(1..=100).contains(&self.navigation.columns) {
-      return Err(invalid("navigation rows and columns must be within 1..=100"));
-    }
-    validate_alphabet(&self.navigation.alphabet)?;
-    range("appearance.font_size", self.appearance.font_size, 8.0, 96.0)?;
-    range("appearance.opacity", self.appearance.opacity, 0.1, 1.0)?;
-    for color in [
-      &self.appearance.foreground,
-      &self.appearance.background,
-      &self.appearance.highlight,
-    ] {
-      if color.len() != 7 || !color.starts_with('#') || !color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit) {
-        return Err(invalid("appearance colors must use #RRGGBB"));
-      }
-    }
+    self.navigation.validate()?;
+    self.appearance.validate(range)?;
     if !["error", "warn", "info", "debug", "trace", "off"].contains(&self.system.log_level.as_str()) {
       return Err(invalid("invalid system.log_level"));
     }
@@ -235,5 +348,34 @@ mod tests {
     let mut removed = config;
     removed.keybindings.preset = "system".into();
     assert!(removed.validate().is_err());
+  }
+
+  #[test]
+  fn mode_overrides_inherit_and_validate() {
+    let config: Config = toml::from_str(
+      r##"
+      [navigation]
+      rows = 10
+      alphabet = "abcd"
+      [navigation.grid]
+      columns = 8
+      [navigation.elements]
+      auto_click = true
+
+      [appearance]
+      background = "#112233"
+      [appearance.grid]
+      grid_lines = false
+      [appearance.elements]
+      opacity = 0.5
+      "##,
+    )
+    .unwrap();
+    config.validate().unwrap();
+    let grid = config.navigation.for_grid();
+    assert_eq!((grid.rows, grid.columns, grid.alphabet.as_str()), (10, 8, "abcd"));
+    assert!(config.navigation.for_elements().auto_click);
+    assert!(!config.appearance.for_grid().grid_lines);
+    assert_eq!(config.appearance.for_elements().opacity, 0.5);
   }
 }
