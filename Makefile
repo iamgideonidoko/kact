@@ -1,7 +1,7 @@
 APP := kact
 CARGO := cargo
 
-.PHONY: help build release run run-release fmt clippy clippy-warn test check doc clean install lint docs docs-build docs-preview \
+.PHONY: help build release run run-release fmt clippy clippy-warn test check coverage coverage-core doc clean install lint docs docs-build docs-preview \
 	config-init doctor daemon start status grid elements freestyle deactivate stop quit reload smoke smoke-mouse
 
 help:
@@ -15,6 +15,8 @@ help:
 	@printf "  make clippy-warn    - Run clippy without denying warnings\n"
 	@printf "  make test           - Run tests\n"
 	@printf "  make check          - Run cargo check\n"
+	@printf "  make coverage       - Create and open the HTML coverage report\n"
+	@printf "  make coverage-core  - Check pure core coverage\n"
 	@printf "  make doc            - Build and open docs\n"
 	@printf "  make config-init    - Create default user config if absent\n"
 	@printf "  make doctor         - Check config, permission, and service\n"
@@ -63,6 +65,13 @@ test:
 
 check:
 	$(CARGO) check
+
+coverage:
+	$(CARGO) llvm-cov --locked --all-targets --html --open
+
+coverage-core:
+	$(CARGO) llvm-cov --locked --all-targets --json --summary-only --output-path target/coverage.json
+	python3 scripts/check_core_coverage.py target/coverage.json
 
 doc:
 	$(CARGO) doc --open
