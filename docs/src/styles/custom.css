@@ -6,7 +6,8 @@
   --sl-color-accent: #4d5358;
   --sl-color-accent-high: #363b3f;
   --sl-font-system:
-    "Manrope", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    "Manrope", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   --sl-font-system-mono:
     "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
@@ -76,10 +77,22 @@ header.header {
   content: "";
   opacity: 0.55;
   background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--sl-color-gray-4) 22%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--sl-color-gray-4) 22%, transparent) 1px, transparent 1px);
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--sl-color-gray-4) 22%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--sl-color-gray-4) 22%, transparent) 1px,
+      transparent 1px
+    );
   background-size: 2.5rem 2.5rem;
-  -webkit-mask-image: radial-gradient(ellipse at 75% 50%, #000, transparent 62%);
+  -webkit-mask-image: radial-gradient(
+    ellipse at 75% 50%,
+    #000,
+    transparent 62%
+  );
   mask-image: radial-gradient(ellipse at 75% 50%, #000, transparent 62%);
   transform: rotate(-8deg);
 }
@@ -91,7 +104,12 @@ header.header {
   pointer-events: none;
   content: "";
   opacity: 0.48;
-  background: linear-gradient(90deg, transparent 49.9%, color-mix(in srgb, var(--sl-color-gray-3) 25%, transparent) 50%, transparent 50.1%);
+  background: linear-gradient(
+    90deg,
+    transparent 49.9%,
+    color-mix(in srgb, var(--sl-color-gray-3) 25%, transparent) 50%,
+    transparent 50.1%
+  );
 }
 
 .hero > * {
@@ -133,7 +151,8 @@ header.header {
 }
 
 .hero .sl-link-button.primary {
-  box-shadow: 0 0.65rem 1.5rem color-mix(in srgb, var(--sl-color-accent) 28%, transparent);
+  box-shadow: 0 0.2rem 0.8rem
+    color-mix(in srgb, var(--sl-color-accent) 28%, transparent);
 }
 
 .hero .hero-html {
@@ -157,7 +176,9 @@ header.header {
 }
 .kact-hero-logo {
   width: min(13rem, 42vw);
-  filter: drop-shadow(0 1.8rem 1.4rem color-mix(in srgb, #000 35%, transparent));
+  filter: drop-shadow(
+    0 1.8rem 1.4rem color-mix(in srgb, #000 35%, transparent)
+  );
 }
 
 .card {
@@ -178,6 +199,149 @@ header.header {
   transform: translateY(-2px);
   border-color: var(--sl-color-accent);
   box-shadow: 0 0.7rem 1.8rem color-mix(in srgb, #000 13%, transparent);
+}
+
+.home-install {
+  margin-block: 2rem 2.5rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 56%, transparent);
+  border-radius: 1rem;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--sl-color-accent) 3%, transparent),
+      transparent 42%
+    ),
+    var(--sl-color-bg);
+  box-shadow: 0 1.1rem 2.8rem color-mix(in srgb, #000 12%, transparent);
+}
+
+.home-install starlight-tabs {
+  display: block;
+}
+
+.home-install .tablist-wrapper {
+  padding: 0.55rem 0.55rem 0;
+}
+
+.home-install [role="tablist"] {
+  gap: 0.35rem;
+  border: 0;
+}
+
+.home-install .tab > [role="tab"] {
+  padding: 0.48rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem 0.55rem 0 0;
+  box-shadow: none;
+  color: var(--sl-color-gray-3);
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.home-install .tab [role="tab"][aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--sl-color-gray-4) 65%, transparent);
+  border-bottom-color: var(--sl-color-bg);
+  background: var(--sl-color-bg);
+  color: var(--sl-color-accent);
+}
+
+.home-install .tablist-wrapper ~ [role="tabpanel"] {
+  margin-top: 0;
+  padding: 0 0.55rem 0.55rem;
+}
+
+.home-install .tablist-wrapper ~ [role="tabpanel"] .header {
+  border-top-right-radius: 0.65rem;
+}
+
+.home-install [role="tabpanel"] pre {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-5) 82%, transparent);
+  border-radius: 0 0 0.65rem 0.65rem;
+  box-shadow: inset 0 1px color-mix(in srgb, #fff 8%, transparent);
+}
+
+.home-links {
+  margin-block: 2.75rem;
+}
+
+.home-links .sl-link-card {
+  position: relative;
+  min-height: 10.5rem;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.9rem;
+  padding: 1.3rem;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--sl-color-accent) 3%, transparent),
+      transparent 45%
+    ),
+    color-mix(in srgb, var(--sl-color-bg) 94%, var(--sl-color-gray-7));
+  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, #000 8%, transparent);
+  transition:
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.home-links .sl-link-card::after {
+  position: absolute;
+  right: -1.7rem;
+  bottom: -2.8rem;
+  width: 7rem;
+  height: 7rem;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-2) 18%, transparent);
+  border-radius: 50%;
+  content: "";
+  transition: transform 0.25s ease;
+}
+
+.home-links .sl-link-card .title {
+  color: var(--sl-color-white);
+  font-size: 1.08rem;
+  letter-spacing: -0.02em;
+}
+
+.home-links .sl-link-card .description {
+  max-width: 25rem;
+  color: var(--sl-color-gray-3);
+  font-size: 0.93rem;
+  line-height: 1.65;
+}
+
+.home-links .sl-link-card .icon {
+  align-self: start;
+  color: var(--sl-color-accent);
+  transition:
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.home-links .sl-link-card:hover {
+  transform: translateY(-0.25rem);
+  border-color: var(--sl-color-accent);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--sl-color-accent) 18%, transparent),
+      transparent 50%
+    ),
+    color-mix(in srgb, var(--sl-color-bg) 92%, var(--sl-color-gray-7));
+  box-shadow: 0 1rem 2.4rem color-mix(in srgb, #000 17%, transparent);
+}
+
+.home-links .sl-link-card:hover::after {
+  transform: scale(1.12);
+}
+
+.home-links .sl-link-card:hover .icon {
+  color: var(--sl-color-white);
+  transform: translateX(0.2rem);
 }
 
 kbd {

@@ -17,23 +17,42 @@ hero:
       variant: minimal
 ---
 
+import { CardGrid, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+
 Kact is a keyboard-driven cursor ACTuator. Use its native macOS navigation overlays, or call commands from shells and keyboard remappers.
 
+<div class="home-install">
+<Tabs>
+  <TabItem label="Release">
+
 ```sh
-mise install
-cargo install --path .
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash # -- --version vX.Y.Z
 kact setup
 kact activate grid
 ```
 
-import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+  </TabItem>
+  <TabItem label="Source">
 
+```sh
+mise install
+cargo install --locked --path .
+kact setup
+kact activate grid
+```
+
+  </TabItem>
+</Tabs>
+</div>
+
+<div class="home-links">
 <CardGrid>
   <LinkCard title="Getting started" description="Install Kact, grant required permissions, and make the first cursor action." href="/kact/getting-started/quick-start/" />
   <LinkCard title="Configuration" description="Configure motion, appearance, runtime behavior, and optional bindings." href="/kact/configuration/overview/" />
   <LinkCard title="CLI reference" description="Every command, argument, and global flag." href="/kact/reference/cli/" />
   <LinkCard title="External integrations" description="Use Hammerspoon, Karabiner-Elements, or Kanata as the keybinding layer." href="/kact/guides/external-integrations/" />
 </CardGrid>
+</div>
 
 ## Choose a workflow
 
