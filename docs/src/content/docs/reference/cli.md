@@ -28,15 +28,15 @@ All commands accept `--config PATH`, `--socket PATH`, and `--log-level LEVEL`. `
 | Toggle | `toggle [grid\|elements\|freestyle]` | Activate the mode or deactivate an active mode. |
 | Deactivate | `deactivate` | Hide navigation and release held input. |
 | Cancel | `cancel` | Clear a label prefix or deactivate if empty. |
-| Move | `move --dx N --dy N` | Move by relative points. |
-| Move absolute | `move-to --x N --y N` | Move to global coordinates. |
+| Move | `move --dx N --dy N [--glide]` | Move by relative points, optionally animating to the resolved endpoint. |
+| Move absolute | `move-to --x N --y N [--glide]` | Move to global coordinates, optionally animating to the endpoint. |
 | Start motion | `move-start <up\|down\|left\|right> [--speed normal\|precise\|fast]` | Begin continuous movement, with an optional held speed override. |
 | Stop motion direction | `move-stop <direction>` | Stop one continuous direction. |
 | Speed | `speed <normal\|precise\|fast>` | Select motion multiplier. |
 | Stop | `stop` | Stop movement and release every held button. |
 | Jump | `jump <top\|bottom\|left\|right\|center\|cycle>` | Move to display edge, center, or cycle corners. |
 
-Coordinates must be finite and within ±1,000,000. Continuous commands require a running daemon and should be paired in order.
+Coordinates must be finite and within ±1,000,000. A glide captures its start and target when received, reaches that target exactly, and never queues. A new pointer action, `move-start`, `stop`, deactivation, reload, or quit cancels it. Continuous commands require a running daemon and should be paired in order.
 
 ## Pointer and labels
 

@@ -1,4 +1,4 @@
-use crate::{Result, desktop::LabelPosition};
+use crate::{Result, core::GlideEasing, desktop::LabelPosition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -8,11 +8,27 @@ use std::path::{Path, PathBuf};
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
   pub motion: MotionConfig,
+  pub glide: GlideConfig,
   pub keybindings: KeyBindings,
   pub modes: ModeConfig,
   pub system: SystemConfig,
   pub navigation: NavigationConfig,
   pub appearance: AppearanceConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GlideConfig {
+  pub duration_ms: u32,
+  pub easing: GlideEasing,
+}
+impl Default for GlideConfig {
+  fn default() -> Self {
+    Self {
+      duration_ms: 140,
+      easing: GlideEasing::EaseOut,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -297,6 +313,9 @@ impl Config {
     range("motion.friction", self.motion.friction, 0.0, 0.9999)?;
     if !(1..=1000).contains(&self.motion.target_fps) {
       return Err(invalid("motion.target_fps must be within 1..=1000"));
+    }
+    if !(16..=2_000).contains(&self.glide.duration_ms) {
+      return Err(invalid("glide.duration_ms must be within 16..=2000"));
     }
     if !["linear", "sigmoid", "exponential"].contains(&self.motion.curve_type.as_str()) {
       return Err(invalid("motion.curve_type must be linear, sigmoid, or exponential"));

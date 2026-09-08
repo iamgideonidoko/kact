@@ -23,6 +23,10 @@ acceleration = 0.8      # 0.001..=1.0
 friction = 0.95         # 0.0..=0.9999, retained per 1/60 s after release
 target_fps = 144        # 1..=1000
 
+[glide]
+duration_ms = 140       # 16..=2000
+easing = "ease-out"     # linear | ease-in-out | ease-out
+
 [modes]
 normal_multiplier = 1.0 # 0.01..=10.0
 precise_multiplier = 0.3
@@ -75,6 +79,6 @@ hot_reload = true
 log_level = "info"     # error | warn | info | debug | trace | off
 ```
 
-`auto_click` clicks after a completed target selection. `rows`, `columns`, and `alphabet` control grid labels. `label_position` places labels inside their target; corner positions fall back to center for small targets. `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` are optional sparse overrides: each omitted field inherits its global value. Appearance settings apply to macOS overlays. `target_fps` controls runtime polling while pointer motion is active.
+`auto_click` clicks after a completed target selection. `rows`, `columns`, and `alphabet` control grid labels. `label_position` places labels inside their target; corner positions fall back to center for small targets. `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` are optional sparse overrides: each omitted field inherits its global value. Appearance settings apply to macOS overlays. `target_fps` controls runtime polling while pointer motion is active. `[glide]` controls the duration and profile for opt-in one-shot cursor animation.
 
 See the [configuration implementation](https://github.com/iamgideonidoko/kact/blob/main/src/config.rs) for validation rules.

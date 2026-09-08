@@ -8,6 +8,12 @@ acceleration = 0.8
 friction = 0.95
 target_fps = 144
 
+[glide]
+# One-shot `move --glide` and `move-to --glide` animation settings.
+duration_ms = 140
+# linear | ease-in-out | ease-out
+easing = "ease-out"
+
 [modes]
 normal_multiplier = 1.0
 precise_multiplier = 0.3

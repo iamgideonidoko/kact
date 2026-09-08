@@ -1,7 +1,7 @@
 use super::bindings::Bindings;
 use crate::command::{Button, Command, Heading, JumpTarget, NavigationMode, Presentation, Speed};
 use crate::config::{AppearanceConfig, Config, NavigationConfig};
-use crate::core::{AppState, Direction, Mode, MotionEngine, Vector2D, navigation::Navigation};
+use crate::core::{AppState, Direction, Glide, Mode, MotionEngine, Vector2D, navigation::Navigation};
 use crate::desktop::{Appearance, Desktop, Rect};
 use crate::platform::{self, CursorActuator, InputListener, InputOptions, KeyEvent, MouseButton};
 use anyhow::{Context, Result, bail};
@@ -34,6 +34,7 @@ pub struct Runtime {
   held_keys: HashMap<String, Heading>,
   base_speed: Mode,
   speed_overrides: Vec<(Direction, Mode)>,
+  glide: Option<(Glide, Instant)>,
   last_tick: Instant,
   last_screen_check: Instant,
   screen_layout: Vec<Rect>,
@@ -76,6 +77,7 @@ impl Runtime {
       held_keys: HashMap::new(),
       base_speed: Mode::Normal,
       speed_overrides: vec![],
+      glide: None,
       last_tick: Instant::now(),
       last_screen_check: Instant::now(),
       screen_layout: vec![],
@@ -254,6 +256,7 @@ impl Runtime {
   }
 
   fn stop_motion(&mut self) -> Result<()> {
+    self.glide = None;
     self.state.input.active_directions.clear();
     self.state.velocity = Vector2D::zero();
     self.held_keys.clear();
@@ -302,7 +305,7 @@ impl Runtime {
     match command {
       Command::Status => {
         return Ok(
-          json!({ "running": true, "position": self.cursor.get_position().ok().map(|point| json!({"x": point.x, "y": point.y})), "active": self.mode.is_some(), "moving": !self.state.input.active_directions.is_empty(), "mode": self.mode, "prefix": self.navigation.as_ref().map(|n| n.prefix.as_str()), "targets": self.navigation.as_ref().map_or(0, |n| n.targets.len()), "config": self.config_path, "global_shortcuts": self.bindings.global.len(), "navigation_keyboard": self.config.keybindings.navigation_enabled }),
+          json!({ "running": true, "position": self.cursor.get_position().ok().map(|point| json!({"x": point.x, "y": point.y})), "active": self.mode.is_some(), "moving": !self.state.input.active_directions.is_empty(), "gliding": self.glide.is_some(), "mode": self.mode, "prefix": self.navigation.as_ref().map(|n| n.prefix.as_str()), "targets": self.navigation.as_ref().map_or(0, |n| n.targets.len()), "config": self.config_path, "global_shortcuts": self.bindings.global.len(), "navigation_keyboard": self.config.keybindings.navigation_enabled }),
         );
       }
       Command::Activate { mode } => self.activate(mode)?,
@@ -327,10 +330,27 @@ impl Runtime {
           self.deactivate()?;
         }
       }
-      Command::Move { dx, dy } => self.cursor.move_relative(Vector2D::new(dx, dy))?,
-      Command::MoveTo { x, y } => self.cursor.move_absolute(Vector2D::new(x, y))?,
+      Command::Move { dx, dy, glide } => {
+        if glide {
+          let start = self.cursor.get_position()?;
+          self.start_glide(start, start.add(&Vector2D::new(dx, dy)));
+        } else {
+          self.glide = None;
+          self.cursor.move_relative(Vector2D::new(dx, dy))?;
+        }
+      }
+      Command::MoveTo { x, y, glide } => {
+        let target = Vector2D::new(x, y);
+        if glide {
+          self.start_glide(self.cursor.get_position()?, target);
+        } else {
+          self.glide = None;
+          self.cursor.move_absolute(target)?;
+        }
+      }
       Command::MoveStart { direction, speed } => {
         // Command motion does not implicitly install a keyboard hook.
+        self.glide = None;
         self.state.active = true;
         let direction = to_direction(direction);
         if let Some(speed) = speed {
@@ -359,6 +379,7 @@ impl Runtime {
         count,
         modifiers,
       } => {
+        self.glide = None;
         if self.held_buttons.contains(&button) {
           self.cursor.button_up(to_button(button), &modifiers)?;
           self.held_buttons.retain(|b| *b != button);
@@ -368,16 +389,19 @@ impl Runtime {
         self.deactivate()?;
       }
       Command::ButtonDown { button, modifiers } => {
+        self.glide = None;
         self.cursor.button_down(to_button(button), &modifiers)?;
         if !self.held_buttons.contains(&button) {
           self.held_buttons.push(button);
         }
       }
       Command::ButtonUp { button, modifiers } => {
+        self.glide = None;
         self.cursor.button_up(to_button(button), &modifiers)?;
         self.held_buttons.retain(|b| *b != button);
       }
       Command::Scroll { dx, dy } => {
+        self.glide = None;
         self.cursor.scroll(dx, dy)?;
         if self.mode == Some(NavigationMode::Elements) {
           self.refresh_at = Some(Instant::now() + Duration::from_millis(180));
@@ -487,6 +511,7 @@ impl Runtime {
       self
         .cursor
         .move_absolute(Vector2D::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0))?;
+      self.glide = None;
       self.selected = Some(rect);
     }
     self.navigation = Some(navigation);
@@ -503,6 +528,7 @@ impl Runtime {
   }
 
   fn jump(&mut self, target: JumpTarget) -> Result<()> {
+    self.glide = None;
     let current = self.cursor.get_position()?;
     let screens = self.desktop()?.screens()?;
     let rect = screens
@@ -603,7 +629,8 @@ impl Runtime {
   }
 
   pub fn sleep_duration(&self) -> Duration {
-    if !self.state.input.active_directions.is_empty() || self.state.velocity.magnitude() > 0.01 {
+    if self.glide.is_some() || !self.state.input.active_directions.is_empty() || self.state.velocity.magnitude() > 0.01
+    {
       Duration::from_secs_f64(1.0 / self.config.motion.target_fps as f64)
         .saturating_sub(self.last_tick.elapsed())
         .clamp(Duration::from_millis(1), Duration::from_millis(16))
@@ -647,6 +674,7 @@ impl Runtime {
       if movement.magnitude() > 0.0001 {
         self.cursor.move_relative(movement)?;
       }
+      self.advance_glide(now)?;
     }
     if self.navigation.is_some() && now.duration_since(self.last_screen_check) >= Duration::from_secs(1) {
       self.last_screen_check = now;
@@ -656,6 +684,33 @@ impl Runtime {
         self.deactivate()?;
         tracing::info!("Display layout or focused window changed; navigation cancelled");
       }
+    }
+    Ok(())
+  }
+
+  fn start_glide(&mut self, start: Vector2D, target: Vector2D) {
+    self.glide = None;
+    if start != target {
+      self.glide = Some((
+        Glide::new(
+          start,
+          target,
+          Duration::from_millis(self.config.glide.duration_ms.into()),
+          self.config.glide.easing,
+        ),
+        Instant::now(),
+      ));
+    }
+  }
+
+  fn advance_glide(&mut self, now: Instant) -> Result<()> {
+    let Some((glide, started)) = &self.glide else {
+      return Ok(());
+    };
+    let (point, complete) = glide.point_at(now.duration_since(*started));
+    self.cursor.move_absolute(point)?;
+    if complete {
+      self.glide = None;
     }
     Ok(())
   }
@@ -763,6 +818,7 @@ mod tests {
       held_keys: HashMap::new(),
       base_speed: Mode::Normal,
       speed_overrides: vec![],
+      glide: None,
       last_tick: Instant::now(),
       last_screen_check: Instant::now(),
       screen_layout: vec![],
@@ -881,6 +937,66 @@ mod tests {
       })
       .unwrap();
     assert_eq!(runtime.state.input.mode, Mode::Precise);
+  }
+  #[test]
+  fn glides_are_exact_and_pointer_actions_cancel_them() {
+    let (mut runtime, output) = runtime();
+    runtime
+      .execute(Command::MoveTo {
+        x: 100.0,
+        y: 50.0,
+        glide: true,
+      })
+      .unwrap();
+    let started = runtime.glide.as_ref().unwrap().1;
+    runtime.advance_glide(started + Duration::from_millis(140)).unwrap();
+    assert_eq!(output.lock().unwrap().position, Vector2D::new(100.0, 50.0));
+    assert!(runtime.glide.is_none());
+
+    runtime
+      .execute(Command::Move {
+        dx: 100.0,
+        dy: 0.0,
+        glide: true,
+      })
+      .unwrap();
+    assert!(runtime.glide.is_some());
+    runtime
+      .execute(Command::Move {
+        dx: 10.0,
+        dy: 0.0,
+        glide: false,
+      })
+      .unwrap();
+    assert!(runtime.glide.is_none());
+    assert_eq!(output.lock().unwrap().position, Vector2D::new(110.0, 50.0));
+
+    runtime
+      .execute(Command::MoveTo {
+        x: 300.0,
+        y: 50.0,
+        glide: true,
+      })
+      .unwrap();
+    runtime
+      .execute(Command::MoveStart {
+        direction: Heading::Right,
+        speed: None,
+      })
+      .unwrap();
+    assert!(runtime.glide.is_none());
+    runtime.execute(Command::Stop).unwrap();
+
+    grid(&mut runtime);
+    runtime
+      .execute(Command::MoveTo {
+        x: 300.0,
+        y: 50.0,
+        glide: true,
+      })
+      .unwrap();
+    runtime.execute(Command::Select { label: "ab".into() }).unwrap();
+    assert!(runtime.glide.is_none());
   }
   #[test]
   fn local_bindings_only_run_active_and_repeat_does_not_click() {

@@ -45,6 +45,8 @@ kact cancel                # clear a label prefix, otherwise deactivate
 
 kact move --dx 20 --dy -10
 kact move-to --x 800 --y 400
+kact move --dx 200 --dy 0 --glide
+kact move-to --x 800 --y 400 --glide
 kact move-start right --speed fast # temporary normal | precise | fast override
 kact move-stop right
 kact speed precise        # normal | precise | fast
@@ -75,7 +77,7 @@ kact quit
 
 Clicking exits navigation. Clicking a held button drops it without an extra click. Deactivation, shutdown, and fatal input failures release held buttons. `stop` leaves an existing navigation overlay active; `deactivate` also hides it.
 
-Actions sent to the running daemon return JSON and a nonzero exit status on failure. Setup and configuration commands print human-readable results. Continuous movement commands do not activate keyboard capture. Send press/release commands in order; the Hammerspoon example serializes them. `scroll` uses pixels on macOS and wheel steps on X11. Coordinates use screen points on macOS, with `(0, 0)` at the primary display's top-left; other displays may have negative coordinates.
+Actions sent to the running daemon return JSON and a nonzero exit status on failure. Setup and configuration commands print human-readable results. Continuous movement commands do not activate keyboard capture. Send press/release commands in order; the Hammerspoon example serializes them. `--glide` animates a one-shot move to a target captured at command receipt; a new pointer action, `move-start`, `stop`, deactivation, reload, or quit cancels it. `scroll` uses pixels on macOS and wheel steps on X11. Coordinates use screen points on macOS, with `(0, 0)` at the primary display's top-left; other displays may have negative coordinates.
 
 All commands accept `--config PATH` and `--socket PATH`; these identify the daemon's configuration at startup and its private socket respectively. Use the same `--socket` for clients of a custom instance. `--config` on a client does not switch a running daemon's config. Socket parent directories must be owned by you with mode `0700`.
 
@@ -137,7 +139,7 @@ enabled = false
 navigation_enabled = false
 ```
 
-Movement settings control speed, acceleration, friction, frame rate, and normal/precise/fast multipliers. `motion.curve_type` controls acceleration toward target speed: `linear`, `sigmoid` (the default), or `exponential`. Releasing movement always uses exponential friction. Navigation settings control rows, columns, label alphabet, and optional automatic clicking after selection. Optional `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` tables override only their specified fields; all other values inherit from the global navigation or appearance settings. Appearance settings control font size, foreground/background/highlight colors, opacity, grid lines, and label position.
+Movement settings control speed, acceleration, friction, frame rate, and normal/precise/fast multipliers. `motion.curve_type` controls acceleration toward target speed: `linear`, `sigmoid` (the default), or `exponential`. Releasing movement always uses exponential friction. `[glide]` controls opt-in one-shot animation separately, with a duration and easing curve. Navigation settings control rows, columns, label alphabet, and optional automatic clicking after selection. Optional `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` tables override only their specified fields; all other values inherit from the global navigation or appearance settings. Appearance settings control font size, foreground/background/highlight colors, opacity, grid lines, and label position.
 
 Valid reloads apply atomically and exit navigation to clear held input. Invalid reloads retain the previous configuration. Atomic editor saves are supported. Logging changes reload too, unless overridden by `--log-level`. When automatic reload is disabled, use `kact reload` to apply changes.
 

@@ -61,6 +61,10 @@ pub enum Command {
     dx: f64,
     #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
     dy: f64,
+    /// Animate to the resolved target
+    #[arg(long)]
+    #[serde(default)]
+    glide: bool,
   },
   /// Move to global screen coordinates
   MoveTo {
@@ -68,6 +72,10 @@ pub enum Command {
     x: f64,
     #[arg(long, allow_hyphen_values = true)]
     y: f64,
+    /// Animate to the target
+    #[arg(long)]
+    #[serde(default)]
+    glide: bool,
   },
   /// Start continuous movement; pair with move-stop on key release
   MoveStart {
@@ -211,7 +219,7 @@ impl Command {
 
   pub fn validate(&self) -> Result<(), String> {
     match self {
-      Self::Move { dx, dy } | Self::MoveTo { x: dx, y: dy } => {
+      Self::Move { dx, dy, .. } | Self::MoveTo { x: dx, y: dy, .. } => {
         if !dx.is_finite() || !dy.is_finite() || dx.abs() > 1_000_000.0 || dy.abs() > 1_000_000.0 {
           return Err("coordinates must be finite and within ±1000000".into());
         }
@@ -254,9 +262,18 @@ mod tests {
   fn commands_validate_untrusted_input() {
     assert!(Command::from_binding("activate grid").is_ok());
     assert!(Command::from_binding("move --dx -20").is_ok());
+    assert!(Command::from_binding("move-to --x 10 --y 20 --glide").is_ok());
     assert!(Command::from_binding("move-start left --speed fast").is_ok());
     assert!(Command::from_binding("daemon").is_err());
-    assert!(Command::Move { dx: f64::NAN, dy: 0.0 }.validate().is_err());
+    assert!(
+      Command::Move {
+        dx: f64::NAN,
+        dy: 0.0,
+        glide: false
+      }
+      .validate()
+      .is_err()
+    );
     assert!(
       Command::Click {
         button: Button::Left,
@@ -267,5 +284,9 @@ mod tests {
       .is_err()
     );
     assert!(serde_json::from_str::<Command>(r#"{"action":"move","dx":1,"dy":0,"extra":1}"#).is_err());
+    assert!(matches!(
+      serde_json::from_str::<Command>(r#"{"action":"move","dx":1,"dy":0}"#).unwrap(),
+      Command::Move { glide: false, .. }
+    ));
   }
 }

@@ -48,12 +48,14 @@ fn strict_config_defaults_and_validation() {
   for text in [
     "[motion]\ntarget_fps = 0",
     "[motion]\nmax_speed = nan",
+    "[glide]\nduration_ms = 1",
     "[navigation]\nalphabet = 'aa'",
     "[appearance]\nbackground = '#GGFFFF'",
     "[modes]\nfast_multiplier = -1",
   ] {
     assert!(toml::from_str::<Config>(text).unwrap().validate().is_err(), "{text}");
   }
+  assert!(toml::from_str::<Config>("[glide]\neasing = 'spring'").is_err());
   toml::from_str::<Config>(include_str!("../kact.toml"))
     .unwrap()
     .validate()
