@@ -47,43 +47,115 @@ header.header {
 
 .hero {
   position: relative;
+  isolation: isolate;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
   overflow: hidden;
   margin-block: 1rem 2rem;
-  padding: clamp(2rem, 6vw, 4.5rem) clamp(1.5rem, 5vw, 4rem);
-  border: 1px solid var(--sl-color-gray-5);
-  border-radius: 0.8rem;
-  background: var(--sl-color-gray-7);
-  box-shadow: 0 1.5rem 4rem color-mix(in srgb, #000 18%, transparent);
+  padding: clamp(2.5rem, 7vw, 5.5rem) clamp(1.5rem, 6vw, 5rem);
+  border-radius: 1.25rem;
+}
+
+.hero .stack,
+.hero .copy,
+.hero .actions {
+  align-items: center;
+  text-align: center;
+}
+
+.hero .hero-html {
+  order: initial;
+}
+
+.hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: -30%;
+  content: "";
+  opacity: 0.55;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--sl-color-gray-4) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--sl-color-gray-4) 22%, transparent) 1px, transparent 1px);
+  background-size: 2.5rem 2.5rem;
+  -webkit-mask-image: radial-gradient(ellipse at 75% 50%, #000, transparent 62%);
+  mask-image: radial-gradient(ellipse at 75% 50%, #000, transparent 62%);
+  transform: rotate(-8deg);
 }
 
 .hero::after {
   position: absolute;
+  z-index: -1;
   inset: 0;
   pointer-events: none;
   content: "";
-  opacity: 0.32;
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 18px,
-    color-mix(in srgb, var(--sl-color-gray-4) 18%, transparent) 19px 20px
-  );
+  opacity: 0.48;
+  background: linear-gradient(90deg, transparent 49.9%, color-mix(in srgb, var(--sl-color-gray-3) 25%, transparent) 50%, transparent 50.1%);
 }
 
 .hero > * {
   position: relative;
   z-index: 1;
 }
-.hero .header {
-  border: 0;
-  background: none;
-  backdrop-filter: none;
+.hero .copy {
+  gap: 0.8rem;
 }
+
+.hero .copy::before {
+  content: "COMMAND-FIRST CURSOR CONTROL";
+  color: var(--sl-color-accent);
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.hero .tagline {
+  max-width: 31rem;
+  color: var(--sl-color-gray-2);
+  font-size: clamp(1.05rem, 1.5vw, 1.25rem);
+  line-height: 1.6;
+}
+
 .hero h1 {
+  max-width: none;
+  margin-block: 0;
+  font-size: clamp(3.5rem, 8vw, 6.6rem);
   letter-spacing: -0.055em;
+  line-height: 0.9;
+  text-wrap: balance;
+}
+
+.hero .actions {
+  margin-top: 0.8rem;
+  gap: 0.8rem;
+}
+
+.hero .sl-link-button.primary {
+  box-shadow: 0 0.65rem 1.5rem color-mix(in srgb, var(--sl-color-accent) 28%, transparent);
+}
+
+.hero .hero-html {
+  position: relative;
+  align-self: center;
+  justify-self: center;
+  width: auto;
+  padding: 0.75rem;
+}
+
+.hero .hero-html::before {
+  position: absolute;
+  z-index: -1;
+  inset: 12%;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-2) 26%, transparent);
+  border-radius: 50%;
+  content: "";
+  box-shadow:
+    0 0 0 1rem color-mix(in srgb, var(--sl-color-accent) 8%, transparent),
+    0 0 0 2.5rem color-mix(in srgb, var(--sl-color-accent) 4%, transparent);
 }
 .kact-hero-logo {
-  width: min(20rem, 36vw);
-  filter: drop-shadow(0 1.5rem 1.25rem color-mix(in srgb, #000 28%, transparent));
+  width: min(13rem, 42vw);
+  filter: drop-shadow(0 1.8rem 1.4rem color-mix(in srgb, #000 35%, transparent));
 }
 
 .card {
@@ -138,5 +210,18 @@ kbd {
   }
   .hero {
     border-radius: 0.9rem;
+  }
+  .hero h1 {
+    font-size: clamp(3.1rem, 15vw, 4.5rem);
+  }
+}
+
+@media (min-width: 50rem) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  .hero .hero-html {
+    order: initial;
   }
 }
