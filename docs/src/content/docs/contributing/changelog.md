@@ -7,4 +7,10 @@ The canonical release history is maintained in [`CHANGELOG.md`](https://github.c
 
 Current unreleased work includes command-driven navigation, configurable bindings, native macOS overlays, X11 shell-driven pointer controls, and the Vi default binding preset.
 
-Before tagging a release, move its user-facing entries into a `## X.Y.Z` section. The release workflow uses that exact section as the GitHub Release notes and rejects a tag that does not match the package version in `Cargo.toml`.
+Before publishing a release, move its user-facing entries into a `## X.Y.Z` section and set the same version in `Cargo.toml`. Then run:
+
+```sh
+make publish VERSION=X.Y.Z
+```
+
+The command accepts changes only to `Cargo.toml`, `Cargo.lock`, and `CHANGELOG.md`; runs the release checks; commits the preparation; tags the commit; and pushes it. GitHub Actions uses the matching changelog section as the GitHub Release notes.
