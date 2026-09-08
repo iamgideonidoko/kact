@@ -3,38 +3,33 @@ title: Installation
 description: Install a verified GitHub Release or build Kact from source.
 ---
 
-Kact ships release archives through GitHub Releases. It is not published to crates.io. The installer downloads the matching archive, verifies its SHA-256 checksum, then installs only the `kact` executable.
+Kact ships release archives through GitHub Releases. The installer downloads the matching archive, verifies its SHA-256 checksum, then installs only the `kact` executable.
 
 ## Requirements
 
 - macOS or a Linux X11 session.
 - Linux releases support x86_64 X11 sessions. Native Wayland is unsupported.
-- The macOS preview is unsigned and unnotarized. macOS may ask you to confirm before the first run.
+- Current macOS releases are unsigned and unnotarized. macOS may ask you to confirm before the first run.
 
 ## Install a release
 
-The latest stable release installs with:
+The latest release installs with:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fLo /tmp/kact-install.sh https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh
-bash /tmp/kact-install.sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash # -- --version vX.Y.Z
 kact --version
 ```
 
-For a preview release, select its exact tag:
+The command installs the latest release. Remove `#` and replace `vX.Y.Z` with a tag to select a specific release:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fLo /tmp/kact-install.sh https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh
-bash /tmp/kact-install.sh --version vX.Y.Z
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash -s -- --version vX.Y.Z
 ```
-
-Replace `vX.Y.Z` with the release tag.
 
 The default destination is `~/.local/bin`. Choose a different one with `KACT_INSTALL_DIR`:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fLo /tmp/kact-install.sh https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh
-KACT_INSTALL_DIR="$HOME/bin" bash /tmp/kact-install.sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | KACT_INSTALL_DIR="$HOME/bin" bash
 ```
 
 Ensure the destination is on `PATH`, then complete setup:

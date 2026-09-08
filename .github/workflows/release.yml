@@ -7,18 +7,14 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    outputs:
-      prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
-      - id: release
-        env:
+      - env:
           TAG: ${{ github.ref_name }}
         run: |
           version=$(awk '/^\[package\]$/ { in_package = 1; next } in_package && /^\[/ { exit } in_package && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
           test "$TAG" = "v$version"
           scripts/release-notes.sh "$version" > RELEASE_NOTES.md
-          [[ "$version" == *-* ]] && echo 'prerelease=true' >> "$GITHUB_OUTPUT" || echo 'prerelease=false' >> "$GITHUB_OUTPUT"
   verify:
     needs: prepare
     strategy:
@@ -102,7 +98,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          prerelease=''
-          [[ '${{ needs.prepare.outputs.prerelease }}' == 'true' ]] && prerelease='--prerelease'
           gh release create "$TAG" artifacts/*.tar.gz SHA256SUMS \
-            --title "$TAG" --notes-file RELEASE_NOTES.md $prerelease
+            --title "$TAG" --notes-file RELEASE_NOTES.md
