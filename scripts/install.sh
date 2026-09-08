@@ -10,7 +10,7 @@ version=""
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--version vX.Y.Z] [--install-dir DIRECTORY]
+Usage: install.sh [--version vX.Y.Z[-rc.N]] [--install-dir DIRECTORY]
 
 Installs Kact from a GitHub Release. The latest release is used unless
 --version is supplied. Set KACT_INSTALL_DIR to change the default destination.
@@ -49,7 +49,7 @@ case "$(uname -s)" in
 esac
 
 if [[ -n "$version" && ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
-  printf 'Version must look like vX.Y.Z: %s\n' "$version" >&2
+  printf 'Version must look like vX.Y.Z or vX.Y.Z-rc.N: %s\n' "$version" >&2
   exit 2
 fi
 

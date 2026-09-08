@@ -4,6 +4,8 @@ All notable user-facing changes are recorded here.
 
 ## Unreleased
 
+## 0.1.0-rc.1
+
 ### Added
 
 - Command-driven cursor navigation, configurable bindings, glides, and native macOS overlays.

@@ -98,5 +98,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" artifacts/*.tar.gz SHA256SUMS \
+          args=()
+          [[ "$TAG" == *-* ]] && args+=(--prerelease)
+          gh release create "$TAG" artifacts/*.tar.gz SHA256SUMS "${args[@]}" \
             --title "$TAG" --notes-file RELEASE_NOTES.md

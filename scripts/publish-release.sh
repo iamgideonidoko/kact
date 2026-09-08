@@ -15,7 +15,7 @@ EOF
 version=${1:?Usage: scripts/publish-release.sh VERSION}
 [[ $# -eq 1 ]] || { usage >&2; exit 2; }
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || {
-  printf 'Version must look like X.Y.Z: %s\n' "$version" >&2
+  printf 'Version must look like X.Y.Z or X.Y.Z-rc.N: %s\n' "$version" >&2
   exit 2
 }
 
