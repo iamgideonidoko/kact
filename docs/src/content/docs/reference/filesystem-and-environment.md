@@ -14,6 +14,15 @@ description: Configuration, logs, sockets, and environment variables read by Kac
 
 Use `kact config path` to see the chosen config path. The socket directory must be owned by the current user and have mode `0700`.
 
+`kact start` writes daemon logs beside the active configuration. When using a custom instance, pass both `--config` and `--socket` to `kact start`, then pass the same `--socket` to every action command:
+
+```sh
+kact --config "$HOME/.config/kact/work.toml" --socket /tmp/kact-work.sock start
+kact --socket /tmp/kact-work.sock activate grid
+```
+
+The client’s `--config` option does not change an already-running daemon. Restart it with the desired startup options instead.
+
 ## Environment
 
 | Variable | Use |

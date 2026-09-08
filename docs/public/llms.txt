@@ -1,0 +1,26 @@
+# Kact
+
+> Kact is a Rust cursor actuator for macOS and Linux X11. Run one local daemon, then control the pointer through a CLI, optional native macOS navigation, or an external shortcut tool.
+
+Kact is command-first: global shortcuts are disabled by default. `move` and `move-to` are immediate; `--glide` animates a one-shot move; `move-start` and `move-stop` provide held directional motion. macOS provides overlays, accessibility targets, and keyboard capture. Linux X11 supports shell-driven pointer actions only. Wayland and Windows are unsupported.
+
+## Start here
+
+- [Introduction](https://iamgideonidoko.github.io/kact/getting-started/introduction/): What Kact does, supported platforms, and its command-first model.
+- [Installation](https://iamgideonidoko.github.io/kact/getting-started/installation/): Build and install with Mise or Rustup, including Linux dependencies.
+- [Quick start](https://iamgideonidoko.github.io/kact/getting-started/quick-start/): Start the daemon, grant permissions, use grid navigation, and stop it.
+- [Platform setup](https://iamgideonidoko.github.io/kact/getting-started/platform-setup/): macOS permissions and Linux X11 limits.
+
+## Use and configure Kact
+
+- [CLI reference](https://iamgideonidoko.github.io/kact/reference/cli/): Commands, arguments, daemon lifecycle, pointer actions, and status output.
+- [Configuration](https://iamgideonidoko.github.io/kact/configuration/overview/): Complete TOML schema, defaults, validation, reload behavior, motion, glide, navigation, and appearance.
+- [Keybindings](https://iamgideonidoko.github.io/kact/configuration/keybindings/): Vi and Emacs local controls plus opt-in custom maps.
+- [Movement and coordinates](https://iamgideonidoko.github.io/kact/concepts/movement-and-coordinates/): Relative, absolute, glide, and held cursor movement.
+
+## Integrations and help
+
+- [External integrations](https://iamgideonidoko.github.io/kact/guides/external-integrations/): Hammerspoon, Karabiner-Elements, and Kanata patterns.
+- [Keyboard and shell workflows](https://iamgideonidoko.github.io/kact/guides/keyboard-and-shell-workflows/): Choose native navigation, direct commands, or an external remapper.
+- [Troubleshooting](https://iamgideonidoko.github.io/kact/help/troubleshooting/): Permissions, daemon, config, and Linux X11 failures.
+- [FAQ](https://iamgideonidoko.github.io/kact/help/faq/): Common platform and lifecycle questions.

@@ -5,6 +5,8 @@ description: Commands, arguments, and global options.
 
 All commands accept `--config PATH`, `--socket PATH`, and `--log-level LEVEL`. `--config` selects the file at daemon startup; passing it to a client does not reconfigure a daemon that is already running. `--socket` selects the private control socket.
 
+Run `kact COMMAND --help` for Clap’s argument help, for example `kact click --help`. Action commands require a running daemon; run `kact start` first.
+
 ## Service and configuration
 
 | Command | Purpose |
@@ -19,6 +21,18 @@ All commands accept `--config PATH`, `--socket PATH`, and `--log-level LEVEL`. `
 | `config check` | Validate the configuration and bindings. |
 | `config path` | Print the resolved config path. |
 | `reload` | Reload the active daemon configuration. |
+
+### Lifecycle example
+
+```sh
+kact start
+kact status
+kact stop       # stops held movement; daemon remains running
+kact deactivate # also hides an active overlay
+kact quit       # stops the daemon
+```
+
+`status` returns JSON including daemon state, pointer position when available, active navigation mode, whether held movement or a glide is active, configuration path, and enabled shortcut counts.
 
 ## Navigation and motion
 
@@ -38,6 +52,8 @@ All commands accept `--config PATH`, `--socket PATH`, and `--log-level LEVEL`. `
 
 Coordinates must be finite and within ±1,000,000. A glide captures its start and target when received, reaches that target exactly, and never queues. A new pointer action, `move-start`, `stop`, deactivation, reload, or quit cancels it. Continuous commands require a running daemon and should be paired in order.
 
+`activate grid` shows labeled cells on every display. `activate elements` labels accessible elements in the focused macOS window and falls back to a grid when no targets are available. `activate freestyle` enables local movement controls without showing an overlay. `toggle MODE` deactivates any active mode, regardless of the requested mode.
+
 ## Pointer and labels
 
 | Command | Syntax | Purpose |
@@ -52,3 +68,23 @@ Coordinates must be finite and within ±1,000,000. A glide captures its start an
 | Presentation | `show <grid-lines\|labels\|larger\|smaller\|more-contrast\|less-contrast>` | Change active overlay presentation. |
 
 Label values must be 1–64 ASCII characters. Scroll inputs are limited to ±100,000 by the CLI; X11 additionally limits them to 1,000 wheel steps. Modified clicks are macOS-only.
+
+### Pointer examples
+
+```sh
+# Right-click, double-click, and Cmd-click.
+kact click --button right
+kact click --count 2
+kact click --modifiers cmd
+
+# Drag, then release it. `stop` can recover a held button.
+kact button-down --button left
+kact move --dx 160 --dy 40
+kact button-up --button left
+
+# Select a displayed target through the command interface.
+kact activate grid
+kact select aa
+```
+
+`show` changes the current overlay session only: it does not write configuration. `show larger` and `show smaller` change grid density; contrast, label visibility, and grid lines reset at the next activation.

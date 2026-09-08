@@ -16,4 +16,4 @@ description: Module responsibilities and platform boundaries.
 
 Keep shared semantics in the core/runtime layers. Platform modules implement operating-system mechanics without changing command behavior. Native macOS UI stays on the main thread.
 
-See [architecture decisions](/contributing/decisions/) for the command-first decision that defines the CLI as the stable integration boundary.
+See [architecture decisions](/kact/contributing/decisions/) for the command-first decision that defines the CLI as the stable integration boundary.
