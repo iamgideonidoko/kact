@@ -2,7 +2,7 @@ APP := kact
 CARGO := cargo
 
 .PHONY: help build release package run run-release fmt clippy clippy-warn test check coverage coverage-core doc clean install lint docs docs-build docs-preview \
-	config-init doctor daemon start status grid elements freestyle deactivate stop quit reload smoke smoke-mouse
+	config-init doctor setup daemon start status grid elements freestyle deactivate stop quit reload smoke smoke-mouse
 
 help:
 	@printf "Available targets:\n"
@@ -20,6 +20,7 @@ help:
 	@printf "  make coverage-core  - Check pure core coverage\n"
 	@printf "  make doc            - Build and open docs\n"
 	@printf "  make config-init    - Create default user config if absent\n"
+	@printf "  make setup          - Create config, guide permissions, and start Kact\n"
 	@printf "  make doctor         - Check config, permission, and service\n"
 	@printf "  make daemon         - Run foreground daemon with debug logs\n"
 	@printf "  make start          - Start background service\n"
@@ -100,6 +101,9 @@ lint: fmt clippy
 
 config-init:
 	$(CARGO) run -- config init
+
+setup:
+	$(CARGO) run -- setup
 
 doctor:
 	$(CARGO) run -- doctor

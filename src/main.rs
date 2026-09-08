@@ -53,6 +53,7 @@ fn main() -> Result<()> {
       }
     }
     Command::Service { command } => kact::service::configure(command, &absolute(&config_path)?, &absolute(&socket)?)?,
+    Command::Setup => setup(&cli, &config_path, &socket)?,
     Command::Start => start(&cli, &config_path, &socket)?,
     Command::Daemon => daemon(&cli, &config_path, &socket)?,
     command => print_reply(ipc::send(&socket, &command)?)?,
@@ -150,6 +151,32 @@ fn start(cli: &Cli, config_path: &Path, socket: &Path) -> Result<()> {
     std::thread::sleep(Duration::from_millis(50));
   }
 }
+
+fn setup(cli: &Cli, config_path: &Path, socket: &Path) -> Result<()> {
+  if !config_path.exists() {
+    initialize_config(config_path)?;
+    println!("Created {}", config_path.display());
+  }
+  load_config(config_path, true)?;
+  if !kact::platform::accessibility_trusted(true) {
+    open_accessibility_settings();
+    println!("Grant Accessibility to Kact in System Settings, then run `kact setup` again.");
+    return Ok(());
+  }
+  start(cli, config_path, socket)?;
+  println!("Ready. Run `kact activate grid` to place the cursor with labels.");
+  Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn open_accessibility_settings() {
+  let _ = std::process::Command::new("open")
+    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    .status();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_accessibility_settings() {}
 
 fn absolute(path: &Path) -> Result<PathBuf> {
   Ok(if path.is_absolute() {

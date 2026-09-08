@@ -37,17 +37,17 @@ curl --proto '=https' --tlsv1.2 -fLo /tmp/kact-install.sh https://raw.githubuser
 KACT_INSTALL_DIR="$HOME/bin" bash /tmp/kact-install.sh
 ```
 
-Ensure the destination is on `PATH`, then start the local service:
+Ensure the destination is on `PATH`, then complete setup:
 
 ```sh
-kact start
+kact setup
 ```
 
 To update, rerun the installer. It replaces the executable only after the download's checksum is verified. Restart a running service afterward:
 
 ```sh
 kact quit
-kact start
+kact setup
 ```
 
 ## Build from source
@@ -98,5 +98,5 @@ Restart the daemon after installing an update:
 
 ```sh
 kact quit
-kact start
+kact setup
 ```

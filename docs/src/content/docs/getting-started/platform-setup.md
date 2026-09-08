@@ -5,7 +5,7 @@ description: macOS permissions and Linux X11 requirements.
 
 ## macOS
 
-Kact uses Accessibility to inject pointer events and inspect accessible UI elements. Grant it in **System Settings → Privacy & Security → Accessibility**. Kact asks for this permission when starting or activating a mode. Grant the application that actually runs Kact: your terminal for development, or the installed binary for a login service.
+Kact uses Accessibility to inject pointer events and inspect accessible UI elements. Run `kact setup`: it requests permission and opens **System Settings → Privacy & Security → Accessibility** when required. Grant the application that actually runs Kact: your terminal for development, or the installed binary for a login service. Then run `kact setup` again.
 
 Native local and optional global keyboard bindings use the macOS event tap. If key capture is denied, grant Input Monitoring to Kact or the terminal that launched it.
 

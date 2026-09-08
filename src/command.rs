@@ -21,6 +21,8 @@ pub struct Cli {
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Command {
+  /// Create configuration, guide permissions, and start Kact
+  Setup,
   /// Start the background service (safe to repeat)
   Start,
   /// Run the service in the foreground
@@ -207,7 +209,7 @@ impl Command {
     let command = cli.command.ok_or("binding needs an action")?;
     if matches!(
       command,
-      Self::Start | Self::Daemon | Self::Config { .. } | Self::Service { .. } | Self::Doctor
+      Self::Setup | Self::Start | Self::Daemon | Self::Config { .. } | Self::Service { .. } | Self::Doctor
     ) || cli.config.is_some()
       || cli.socket.is_some()
       || cli.log_level.is_some()
@@ -264,6 +266,7 @@ mod tests {
     assert!(Command::from_binding("move --dx -20").is_ok());
     assert!(Command::from_binding("move-to --x 10 --y 20 --glide").is_ok());
     assert!(Command::from_binding("move-start left --speed fast").is_ok());
+    assert!(Command::from_binding("setup").is_err());
     assert!(Command::from_binding("daemon").is_err());
     assert!(
       Command::Move {

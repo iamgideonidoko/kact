@@ -1,32 +1,29 @@
 ---
 title: Quick start
-description: Start the Kact daemon and make your first pointer action.
+description: Set up Kact and make your first pointer action.
 ---
 
-1. Check where Kact will store its configuration, then start the daemon. `start` creates a default config when none exists.
+1. Run setup. It creates the default configuration, asks for Accessibility on macOS, and starts the daemon. If macOS opens System Settings, grant permission and run the same command again.
 
    ```sh
-   kact config path
-   kact start
+   kact setup
    ```
 
-2. On macOS, grant Accessibility when prompted in **System Settings → Privacy & Security → Accessibility**. Input Monitoring may also be needed for keyboard capture.
-
-3. Activate the grid.
+2. Activate the grid.
 
    ```sh
    kact activate grid
    ```
 
-4. Type the labels shown on screen to place the cursor. Press <kbd>Enter</kbd> to click, or <kbd>Escape</kbd> to clear a partial label and press it again to cancel.
+3. Type the labels shown on screen to place the cursor. Press <kbd>Enter</kbd> to click, or <kbd>Escape</kbd> to clear a partial label and press it again to cancel.
 
-5. Inspect the daemon when needed:
+4. Inspect the daemon when needed:
 
    ```sh
    kact status
    ```
 
-6. Stop the daemon when finished.
+5. Stop the daemon when finished.
 
    ```sh
    kact quit

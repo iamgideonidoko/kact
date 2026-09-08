@@ -6,7 +6,7 @@ description: Use Kact with Hammerspoon, Karabiner-Elements, and Kanata.
 Kact commands are the integration boundary. Start Kact once, configure the external tool to call an absolute path to `kact`, and leave Kact global bindings disabled when that tool owns activation.
 
 ```sh
-kact start
+kact setup
 kact status
 ```
 

@@ -5,12 +5,13 @@ description: Commands, arguments, and global options.
 
 All commands accept `--config PATH`, `--socket PATH`, and `--log-level LEVEL`. `--config` selects the file at daemon startup; passing it to a client does not reconfigure a daemon that is already running. `--socket` selects the private control socket.
 
-Run `kact COMMAND --help` for Clap’s argument help, for example `kact click --help`. Action commands require a running daemon; run `kact start` first.
+Run `kact COMMAND --help` for Clap’s argument help, for example `kact click --help`. Action commands require a running daemon; run `kact setup` first.
 
 ## Service and configuration
 
 | Command | Purpose |
 | --- | --- |
+| `setup` | Create configuration, guide macOS Accessibility, and start the daemon. |
 | `start` | Start the background daemon; safe to repeat. |
 | `daemon` | Run the daemon in the foreground. |
 | `service install` / `uninstall` | Configure macOS login startup. |
@@ -25,7 +26,7 @@ Run `kact COMMAND --help` for Clap’s argument help, for example `kact click --
 ### Lifecycle example
 
 ```sh
-kact start
+kact setup
 kact status
 kact stop       # stops held movement; daemon remains running
 kact deactivate # also hides an active overlay

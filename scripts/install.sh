@@ -83,6 +83,6 @@ mv -f "$temporary" "$install_dir/kact"
 printf 'Installed kact to %s\n' "$install_dir/kact"
 "$install_dir/kact" --version
 case ":$PATH:" in
-  *":$install_dir:"*) ;;
-  *) printf 'Add %s to PATH, then run: kact start\n' "$install_dir" ;;
+  *":$install_dir:"*) printf 'Next: kact setup\n' ;;
+  *) printf 'Add %s to PATH, then run: kact setup\n' "$install_dir" ;;
 esac

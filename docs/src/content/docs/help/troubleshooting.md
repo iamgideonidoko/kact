@@ -9,7 +9,7 @@ description: Diagnose Kact configuration, permission, service, and platform fail
 
 **Check:** Run `kact doctor`.
 
-**Fix:** Enable Kact or the launching terminal in **System Settings → Privacy & Security → Accessibility**, then run `kact start` again.
+**Fix:** Run `kact setup`. It opens **System Settings → Privacy & Security → Accessibility** when required. Enable Kact or the launching terminal, then rerun `kact setup`.
 
 ## Navigation keys do not work
 
@@ -23,7 +23,7 @@ description: Diagnose Kact configuration, permission, service, and platform fail
 
 **Cause:** The action command does not start a daemon by itself.
 
-**Fix:** Run `kact start`, then retry. Use the same `--socket` argument for a custom daemon and its clients.
+**Fix:** Run `kact setup`, then retry. Use the same `--socket` argument for a custom daemon and its clients.
 
 ## `stop` did not stop Kact
 

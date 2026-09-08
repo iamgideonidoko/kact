@@ -35,7 +35,7 @@ fn commands_are_discoverable_and_missing_service_is_actionable() {
   let help = run(&["--help"]);
   assert!(help.status.success());
   let text = String::from_utf8(help.stdout).unwrap();
-  for name in ["activate", "move-start", "click", "select", "doctor"] {
+  for name in ["setup", "activate", "move-start", "click", "select", "doctor"] {
     assert!(text.contains(name));
   }
   let missing = temporary().join("control.sock");

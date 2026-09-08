@@ -18,7 +18,7 @@ Published binaries are installed from GitHub Releases, never from crates.io. Pre
 ```sh
 curl --proto '=https' --tlsv1.2 -fLo /tmp/kact-install.sh https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh
 bash /tmp/kact-install.sh --version vX.Y.Z
-kact start
+kact setup
 ```
 
 Replace `vX.Y.Z` with the release tag. The installer selects the macOS Apple Silicon, macOS Intel, or Linux x86_64 archive, verifies its SHA-256 checksum before installing, and writes only to `~/.local/bin` by default. Use `KACT_INSTALL_DIR=/path/to/bin` to choose another directory. The preview is unsigned and unnotarized; macOS may ask for confirmation before its first run.
@@ -32,11 +32,11 @@ Install the pinned Rust 1.88.0 toolchain:
 ```sh
 mise install
 cargo install --locked --path .
-kact start
+kact setup
 kact activate grid
 ```
 
-Grant **Accessibility** permission when prompted in System Settings → Privacy & Security, then retry `kact start`. If keyboard capture is denied, check Input Monitoring too. `kact doctor` checks configuration, permission, and service availability without moving the cursor.
+`kact setup` creates the default configuration, opens macOS Accessibility settings when needed, and starts the daemon. After granting permission, rerun `kact setup`. If keyboard capture is denied, check Input Monitoring too. `kact doctor` checks configuration, permission, and service availability without moving the cursor.
 
 `start` creates a default user config if needed and launches one background instance. It is safe to repeat. Logs are saved beside the config as `kact.log`. Use `kact daemon` for foreground logs or `kact quit` to stop.
 
@@ -159,7 +159,7 @@ Valid reloads apply atomically and exit navigation to clear held input. Invalid 
 
 ## External integrations
 
-Run `kact start` once, then let your shortcut tool invoke the CLI:
+Run `kact setup` once, then let your shortcut tool invoke the CLI:
 
 - [Hammerspoon](examples/hammerspoon.lua): activation shortcuts and ordered continuous-movement press/release commands using [hs.task](https://www.hammerspoon.org/docs/hs.task.html).
 - [Karabiner-Elements](examples/karabiner.json): import a complex modification using [shell commands](https://karabiner-elements.pqrs.org/docs/json/complex-modifications-manipulator-definition/to/shell-command/).
