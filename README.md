@@ -45,7 +45,7 @@ kact cancel                # clear a label prefix, otherwise deactivate
 
 kact move --dx 20 --dy -10
 kact move-to --x 800 --y 400
-kact move-start right      # continuous movement; pair with release below
+kact move-start right --speed fast # temporary normal | precise | fast override
 kact move-stop right
 kact speed precise        # normal | precise | fast
 kact stop                  # stop motion and release held mouse buttons

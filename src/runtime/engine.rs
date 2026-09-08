@@ -32,6 +32,8 @@ pub struct Runtime {
   selected: Option<Rect>,
   held_buttons: Vec<Button>,
   held_keys: HashMap<String, Heading>,
+  base_speed: Mode,
+  speed_overrides: Vec<(Direction, Mode)>,
   last_tick: Instant,
   last_screen_check: Instant,
   screen_layout: Vec<Rect>,
@@ -72,6 +74,8 @@ impl Runtime {
       selected: None,
       held_buttons: Vec::new(),
       held_keys: HashMap::new(),
+      base_speed: Mode::Normal,
+      speed_overrides: vec![],
       last_tick: Instant::now(),
       last_screen_check: Instant::now(),
       screen_layout: vec![],
@@ -186,6 +190,8 @@ impl Runtime {
     self.state.input.active_directions.clear();
     self.state.velocity = Vector2D::zero();
     self.held_keys.clear();
+    self.speed_overrides.clear();
+    self.apply_speed();
     self.navigation = navigation;
     self.screen_layout = screens;
     self.mode = Some(actual_mode);
@@ -240,10 +246,19 @@ impl Runtime {
     Ok(())
   }
 
+  fn apply_speed(&mut self) {
+    self
+      .state
+      .input
+      .set_mode(self.speed_overrides.last().map_or(self.base_speed, |(_, mode)| *mode));
+  }
+
   fn stop_motion(&mut self) -> Result<()> {
     self.state.input.active_directions.clear();
     self.state.velocity = Vector2D::zero();
     self.held_keys.clear();
+    self.speed_overrides.clear();
+    self.apply_speed();
     self.cursor.release_all()?;
     self.held_buttons.clear();
     Ok(())
@@ -314,24 +329,30 @@ impl Runtime {
       }
       Command::Move { dx, dy } => self.cursor.move_relative(Vector2D::new(dx, dy))?,
       Command::MoveTo { x, y } => self.cursor.move_absolute(Vector2D::new(x, y))?,
-      Command::MoveStart { direction } => {
+      Command::MoveStart { direction, speed } => {
         // Command motion does not implicitly install a keyboard hook.
         self.state.active = true;
-        self.state.input.press_direction(to_direction(direction));
+        let direction = to_direction(direction);
+        if let Some(speed) = speed {
+          self.speed_overrides.retain(|(held, _)| *held != direction);
+          self.speed_overrides.push((direction, to_mode(speed)));
+          self.apply_speed();
+        }
+        self.state.input.press_direction(direction);
       }
       Command::MoveStop { direction } => {
-        self.state.input.release_direction(to_direction(direction));
+        let direction = to_direction(direction);
+        self.state.input.release_direction(direction);
+        self.speed_overrides.retain(|(held, _)| *held != direction);
+        self.apply_speed();
         if self.state.input.active_directions.is_empty() {
           self.state.velocity = Vector2D::zero();
           self.state.active = self.mode.is_some();
         }
       }
       Command::Speed { mode } => {
-        self.state.input.mode = match mode {
-          Speed::Normal => Mode::Normal,
-          Speed::Precise => Mode::Precise,
-          Speed::Fast => Mode::Fast,
-        }
+        self.base_speed = to_mode(mode);
+        self.apply_speed();
       }
       Command::Click {
         button,
@@ -571,7 +592,7 @@ impl Runtime {
       {
         return Ok(());
       }
-      if let Command::MoveStart { direction } = command {
+      if let Command::MoveStart { direction, .. } = command {
         self.held_keys.insert(event.key, direction);
       }
       self.execute(command)?;
@@ -655,6 +676,13 @@ fn to_direction(direction: Heading) -> Direction {
     Heading::Right => Direction::Right,
   }
 }
+fn to_mode(speed: Speed) -> Mode {
+  match speed {
+    Speed::Normal => Mode::Normal,
+    Speed::Precise => Mode::Precise,
+    Speed::Fast => Mode::Fast,
+  }
+}
 fn to_button(button: Button) -> MouseButton {
   match button {
     Button::Left => MouseButton::Left,
@@ -733,6 +761,8 @@ mod tests {
       selected: None,
       held_buttons: vec![],
       held_keys: HashMap::new(),
+      base_speed: Mode::Normal,
+      speed_overrides: vec![],
       last_tick: Instant::now(),
       last_screen_check: Instant::now(),
       screen_layout: vec![],
@@ -809,6 +839,7 @@ mod tests {
     runtime
       .execute(Command::MoveStart {
         direction: Heading::Right,
+        speed: None,
       })
       .unwrap();
     assert!(runtime.listener.is_none());
@@ -823,6 +854,33 @@ mod tests {
       .unwrap();
     assert_eq!(runtime.state.velocity, Vector2D::zero());
     assert!(!runtime.state.active);
+  }
+  #[test]
+  fn held_speed_overrides_restore_the_selected_mode() {
+    let (mut runtime, _) = runtime();
+    runtime.execute(Command::Speed { mode: Speed::Precise }).unwrap();
+    runtime
+      .execute(Command::MoveStart {
+        direction: Heading::Right,
+        speed: Some(Speed::Fast),
+      })
+      .unwrap();
+    assert_eq!(runtime.state.input.mode, Mode::Fast);
+    runtime
+      .execute(Command::MoveStart {
+        direction: Heading::Up,
+        speed: Some(Speed::Normal),
+      })
+      .unwrap();
+    assert_eq!(runtime.state.input.mode, Mode::Normal);
+    runtime.execute(Command::MoveStop { direction: Heading::Up }).unwrap();
+    assert_eq!(runtime.state.input.mode, Mode::Fast);
+    runtime
+      .execute(Command::MoveStop {
+        direction: Heading::Right,
+      })
+      .unwrap();
+    assert_eq!(runtime.state.input.mode, Mode::Precise);
   }
   #[test]
   fn local_bindings_only_run_active_and_repeat_does_not_click() {

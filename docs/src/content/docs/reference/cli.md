@@ -30,7 +30,7 @@ All commands accept `--config PATH`, `--socket PATH`, and `--log-level LEVEL`. `
 | Cancel | `cancel` | Clear a label prefix or deactivate if empty. |
 | Move | `move --dx N --dy N` | Move by relative points. |
 | Move absolute | `move-to --x N --y N` | Move to global coordinates. |
-| Start motion | `move-start <up\|down\|left\|right>` | Begin continuous movement. |
+| Start motion | `move-start <up\|down\|left\|right> [--speed normal\|precise\|fast]` | Begin continuous movement, with an optional held speed override. |
 | Stop motion direction | `move-stop <direction>` | Stop one continuous direction. |
 | Speed | `speed <normal\|precise\|fast>` | Select motion multiplier. |
 | Stop | `stop` | Stop movement and release every held button. |

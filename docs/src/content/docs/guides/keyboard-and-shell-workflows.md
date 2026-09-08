@@ -25,7 +25,7 @@ kact move --dx 250
 kact button-up
 ```
 
-`move-start right` and `move-stop right` are for ordered key press/release integrations. They do not install keyboard capture. Use `kact stop` to halt motion and release every held mouse button.
+`move-start right` and `move-stop right` are for ordered key press/release integrations. They do not install keyboard capture. Add `--speed normal`, `--speed precise`, or `--speed fast` to apply a configured multiplier while that direction is held. Use `kact stop` to halt motion and release every held mouse button.
 
 ## Optional bindings
 

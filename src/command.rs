@@ -73,6 +73,9 @@ pub enum Command {
   MoveStart {
     #[arg(value_enum)]
     direction: Heading,
+    /// Temporarily use a configured speed multiplier while held
+    #[arg(long, value_enum)]
+    speed: Option<Speed>,
   },
   /// Stop movement in one direction
   MoveStop {
@@ -251,6 +254,7 @@ mod tests {
   fn commands_validate_untrusted_input() {
     assert!(Command::from_binding("activate grid").is_ok());
     assert!(Command::from_binding("move --dx -20").is_ok());
+    assert!(Command::from_binding("move-start left --speed fast").is_ok());
     assert!(Command::from_binding("daemon").is_err());
     assert!(Command::Move { dx: f64::NAN, dy: 0.0 }.validate().is_err());
     assert!(
