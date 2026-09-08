@@ -1,0 +1,108 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(awk '/^\[package\]$/ { in_package = 1; next } in_package && /^\[/ { exit } in_package && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          test "$TAG" = "v$version"
+          scripts/release-notes.sh "$version" > RELEASE_NOTES.md
+          [[ "$version" == *-* ]] && echo 'prerelease=true' >> "$GITHUB_OUTPUT" || echo 'prerelease=false' >> "$GITHUB_OUTPUT"
+  verify:
+    needs: prepare
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev
+      - run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy && rustup default 1.88.0
+      - run: cargo fmt --check
+      - run: cargo test --locked
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo build --locked --release
+  coverage:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev
+      - run: rustup toolchain install 1.88.0 --profile minimal --component llvm-tools-preview && rustup default 1.88.0
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov --locked --all-targets --json --summary-only --output-path target/coverage.json
+      - run: python3 scripts/check_core_coverage.py target/coverage.json
+  docs:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - run: pnpm --dir docs install --frozen-lockfile
+      - run: pnpm --dir docs run build
+  package:
+    needs: [prepare, verify, coverage, docs]
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev
+      - run: rustup toolchain install 1.88.0 --profile minimal && rustup default 1.88.0
+      - run: rustup target add ${{ matrix.target }}
+      - run: scripts/package-release.sh --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kact-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+  publish:
+    needs: [prepare, package]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create release notes
+        run: |
+          version=$(awk '/^\[package\]$/ { in_package = 1; next } in_package && /^\[/ { exit } in_package && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          scripts/release-notes.sh "$version" > RELEASE_NOTES.md
+      - run: cat artifacts/*.sha256 | sort > SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=''
+          [[ '${{ needs.prepare.outputs.prerelease }}' == 'true' ]] && prerelease='--prerelease'
+          gh release create "$TAG" artifacts/*.tar.gz SHA256SUMS \
+            --title "$TAG" --notes-file RELEASE_NOTES.md $prerelease

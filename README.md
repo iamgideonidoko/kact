@@ -11,13 +11,27 @@ Control the cursor from your keyboard or shell. Written in Rust, with native mac
 
 macOS is the primary platform. Linux X11 supports shell-driven mouse actions; native overlays, element discovery, keyboard capture, and modified clicks are not available there. Native Wayland and Windows are unsupported.
 
-## Quick start
+## Install
+
+Published binaries are installed from GitHub Releases, never from crates.io. Preview releases are selected by their exact tag:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fLo /tmp/kact-install.sh https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh
+bash /tmp/kact-install.sh --version vX.Y.Z
+kact start
+```
+
+Replace `vX.Y.Z` with the release tag. The installer selects the macOS Apple Silicon, macOS Intel, or Linux x86_64 archive, verifies its SHA-256 checksum before installing, and writes only to `~/.local/bin` by default. Use `KACT_INSTALL_DIR=/path/to/bin` to choose another directory. The preview is unsigned and unnotarized; macOS may ask for confirmation before its first run.
+
+After a stable release exists, omit `--version` to install the latest stable release. See the [installation guide](https://iamgideonidoko.github.io/kact/getting-started/installation/) for source builds, updates, and supported platforms.
+
+## Build from source
 
 Install the pinned Rust 1.88.0 toolchain:
 
 ```sh
 mise install
-cargo install --path .
+cargo install --locked --path .
 kact start
 kact activate grid
 ```
@@ -170,12 +184,18 @@ The first native smoke check briefly shows overlays and starts keyboard capture 
 
 Automated tests cover config validation, movement timing, labels, state transitions, drag release, shortcut suppression, IPC framing/locking, and atomic reload. Native smoke checks cover grid/element presentation, keyboard suppression/passthrough, real clicks/drag/scroll, reload, and clean shutdown. CI is configured for macOS and Linux; Linux desktop behavior still needs verification.
 
-Remaining release gates:
+Preview release requirements:
+
+- [ ] Set a nonzero SemVer package version and add its section to `CHANGELOG.md`.
+- [ ] Create and push the matching `vX.Y.Z` tag. The release workflow validates the match, runs checks, builds archives, and publishes the release with checksums.
+- [ ] Test the published installer on a clean supported machine.
+
+Stable distribution gates:
 
 - [ ] Exercise real clicking, dragging, scrolling, remappers, keyboard layouts, Spaces, fullscreen apps, and mixed-scale display changes across supported macOS versions.
 - [ ] Test permission revocation, sleep/wake, secure input, and long-running sessions.
 - [ ] Benchmark end-to-end latency and idle/active resource use; publish measured results.
-- [ ] Distribute Developer ID signed, notarized releases with upgrade verification.
+- [ ] Distribute Developer ID signed and notarized macOS releases with upgrade verification.
 - [ ] Replace legacy Cocoa bindings before their transitive `block` dependency becomes incompatible with Rust.
 - [ ] Validate X11 behavior separately; native Wayland and Windows need dedicated implementations.
 

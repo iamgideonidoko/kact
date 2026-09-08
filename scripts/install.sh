@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository=iamgideonidoko/kact
+install_dir=${KACT_INSTALL_DIR:-"$HOME/.local/bin"}
+version=""
+
+usage() {
+  cat <<'EOF'
+Usage: install.sh [--version vX.Y.Z] [--install-dir DIRECTORY]
+
+Installs Kact from a GitHub Release. The latest stable release is used unless
+--version is supplied. Set KACT_INSTALL_DIR to change the default destination.
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --version) version=${2:?missing version}; shift 2 ;;
+    --install-dir) install_dir=${2:?missing directory}; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+case "$(uname -s)" in
+  Darwin)
+    case "$(uname -m)" in
+      arm64) platform=macos-arm64 ;;
+      x86_64) platform=macos-x86_64 ;;
+      *) printf 'Unsupported macOS architecture: %s\n' "$(uname -m)" >&2; exit 1 ;;
+    esac
+    ;;
+  Linux)
+    [[ -z ${WAYLAND_DISPLAY:-} ]] || {
+      printf 'Native Wayland is unsupported. Run Kact in an X11 session.\n' >&2
+      exit 1
+    }
+    [[ $(uname -m) == x86_64 ]] || {
+      printf 'Unsupported Linux architecture: %s\n' "$(uname -m)" >&2
+      exit 1
+    }
+    platform=linux-x86_64
+    ;;
+  *) printf 'Unsupported operating system: %s\n' "$(uname -s)" >&2; exit 1 ;;
+esac
+
+if [[ -n "$version" && ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+  printf 'Version must look like vX.Y.Z: %s\n' "$version" >&2
+  exit 2
+fi
+
+asset="kact-${platform}.tar.gz"
+if [[ -n "$version" ]]; then
+  release_url="https://github.com/$repository/releases/download/$version"
+else
+  release_url="https://github.com/$repository/releases/latest/download"
+fi
+
+workdir=$(mktemp -d)
+trap 'rm -rf "$workdir"' EXIT
+curl --fail --location --silent --show-error "$release_url/SHA256SUMS" -o "$workdir/SHA256SUMS"
+curl --fail --location --silent --show-error "$release_url/$asset" -o "$workdir/$asset"
+
+expected=$(awk -v asset="$asset" '$2 == asset { print $1; exit }' "$workdir/SHA256SUMS")
+[[ -n "$expected" ]] || { printf 'No checksum for %s in SHA256SUMS\n' "$asset" >&2; exit 1; }
+if command -v shasum >/dev/null 2>&1; then
+  actual=$(shasum -a 256 "$workdir/$asset" | awk '{ print $1 }')
+else
+  actual=$(sha256sum "$workdir/$asset" | awk '{ print $1 }')
+fi
+[[ "$actual" == "$expected" ]] || { printf 'Checksum verification failed for %s\n' "$asset" >&2; exit 1; }
+
+mkdir "$workdir/extract"
+tar -xzf "$workdir/$asset" -C "$workdir/extract"
+binary=$(find "$workdir/extract" -type f -name kact -perm -u+x -print -quit)
+[[ -n "$binary" ]] || { printf 'Release archive does not contain an executable kact binary\n' >&2; exit 1; }
+
+mkdir -p "$install_dir"
+temporary="$install_dir/.kact.$$"
+install -m 755 "$binary" "$temporary"
+mv -f "$temporary" "$install_dir/kact"
+printf 'Installed kact to %s\n' "$install_dir/kact"
+"$install_dir/kact" --version
+case ":$PATH:" in
+  *":$install_dir:"*) ;;
+  *) printf 'Add %s to PATH, then run: kact start\n' "$install_dir" ;;
+esac
