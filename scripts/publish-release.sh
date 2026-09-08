@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/publish-release.sh VERSION
+Usage: scripts/publish-release.sh
 
 Publish a prepared release from main. Before running, set Cargo.toml's package
 version and add a matching CHANGELOG.md section. Only Cargo.toml, Cargo.lock,
@@ -12,14 +12,18 @@ EOF
 }
 
 [[ ${1:-} != --help && ${1:-} != -h ]] || { usage; exit 0; }
-version=${1:?Usage: scripts/publish-release.sh VERSION}
-[[ $# -eq 1 ]] || { usage >&2; exit 2; }
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || {
-  printf 'Version must look like X.Y.Z or X.Y.Z-rc.N: %s\n' "$version" >&2
-  exit 2
-}
+[[ $# -eq 0 ]] || { usage >&2; exit 2; }
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
+version=$(awk '
+  /^\[package\]$/ { in_package = 1; next }
+  in_package && /^\[/ { exit }
+  in_package && /^version = / { gsub(/"/, "", $3); print $3; exit }
+' Cargo.toml)
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || {
+  die "Cargo.toml version must look like X.Y.Z or X.Y.Z-rc.N: $version"
+}
+
 assert_release_changes() {
   while IFS= read -r change; do
     [[ -z "$change" ]] && continue
@@ -34,13 +38,6 @@ assert_release_changes() {
 [[ $(git branch --show-current) == main ]] || die 'Releases must be published from main.'
 git remote get-url origin >/dev/null || die 'The origin remote is required.'
 [[ -z $(git tag --list "v$version") ]] || die "Tag v$version already exists."
-
-package_version=$(awk '
-  /^\[package\]$/ { in_package = 1; next }
-  in_package && /^\[/ { exit }
-  in_package && /^version = / { gsub(/"/, "", $3); print $3; exit }
-' Cargo.toml)
-[[ "$package_version" == "$version" ]] || die "Cargo.toml is $package_version; expected $version."
 
 notes=$(scripts/release-notes.sh "$version")
 [[ -n ${notes//[[:space:]]/} ]] || die "CHANGELOG.md section $version must contain release notes."

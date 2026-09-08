@@ -9,7 +9,7 @@ help:
 	@printf "  make build          - Build in debug mode\n"
 	@printf "  make release        - Build in release mode\n"
 	@printf "  make package        - Build a host release archive in dist/\n"
-	@printf "  make publish VERSION=X.Y.Z[-rc.N] - Verify, tag, and push a prepared release\n"
+	@printf "  make publish        - Verify, tag, and push the version in Cargo.toml\n"
 	@printf "  make run            - Build and run (debug). Pass ARGS='-- --flag' to forward args to the program\n"
 	@printf "  make run-release    - Build and run in release mode\n"
 	@printf "  make fmt            - Run rustfmt\n"
@@ -52,7 +52,7 @@ package:
 	scripts/package-release.sh
 
 publish:
-	scripts/publish-release.sh $(VERSION)
+	scripts/publish-release.sh
 
 run: build
 	@# Forward ARGS to the binary; example: make run ARGS="-- --config custom.toml"
