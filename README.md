@@ -40,6 +40,8 @@ kact activate grid
 ```sh
 kact service install      # enable startup at the next login
 kact service uninstall    # remove login startup and unload the managed service
+kact uninstall            # remove a release-script installation; keep config and logs
+kact uninstall --purge    # also remove config, logs, and socket
 ```
 
 Linux X11 builds need `libx11-dev` and `libxtst-dev`. Set `keybindings.navigation_enabled = false` when using freestyle commands there.

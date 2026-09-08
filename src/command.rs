@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "kact", version, about = "Control the cursor from your keyboard or shell")]
+#[command(name = "kact", version, about = "Keyboard-driven cursor ACTuator")]
 pub struct Cli {
   /// Override the configuration file
   #[arg(short, long, global = true)]
@@ -23,6 +23,12 @@ pub struct Cli {
 pub enum Command {
   /// Create configuration, guide permissions, and start Kact
   Setup,
+  /// Remove a release-script installation; --purge also removes configuration and logs
+  Uninstall {
+    #[arg(long)]
+    #[serde(default)]
+    purge: bool,
+  },
   /// Start the background service (safe to repeat)
   Start,
   /// Run the service in the foreground
@@ -209,7 +215,13 @@ impl Command {
     let command = cli.command.ok_or("binding needs an action")?;
     if matches!(
       command,
-      Self::Setup | Self::Start | Self::Daemon | Self::Config { .. } | Self::Service { .. } | Self::Doctor
+      Self::Setup
+        | Self::Uninstall { .. }
+        | Self::Start
+        | Self::Daemon
+        | Self::Config { .. }
+        | Self::Service { .. }
+        | Self::Doctor
     ) || cli.config.is_some()
       || cli.socket.is_some()
       || cli.log_level.is_some()
@@ -267,6 +279,7 @@ mod tests {
     assert!(Command::from_binding("move-to --x 10 --y 20 --glide").is_ok());
     assert!(Command::from_binding("move-start left --speed fast").is_ok());
     assert!(Command::from_binding("setup").is_err());
+    assert!(Command::from_binding("uninstall").is_err());
     assert!(Command::from_binding("daemon").is_err());
     assert!(
       Command::Move {

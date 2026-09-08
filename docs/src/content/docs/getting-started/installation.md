@@ -45,6 +45,16 @@ kact quit
 kact setup
 ```
 
+## Uninstall
+
+```sh
+kact uninstall
+```
+
+This stops Kact, removes its managed macOS login service, and removes a binary installed by the release script. Configuration and logs stay in place. Use `kact uninstall --purge` to remove the active configuration, log, and socket too.
+
+Kact verifies its release-install receipt before deleting a binary. Cargo and Homebrew installations are left alone; remove those with the tool that installed them.
+
 ## Build from source
 
 Source builds need Rust 1.88.0 with `rustfmt` and `clippy`. The repository pins both in `rust-toolchain.toml` and `.mise.toml`. Linux source builds also need X11 and XTest development headers.

@@ -3,13 +3,16 @@ set -euo pipefail
 
 repository=iamgideonidoko/kact
 install_dir=${KACT_INSTALL_DIR:-"$HOME/.local/bin"}
+state_home=${XDG_STATE_HOME:-}
+[[ "$state_home" == /* ]] || state_home="$HOME/.local/state"
+state_dir="$state_home/kact"
 version=""
 
 usage() {
   cat <<'EOF'
 Usage: install.sh [--version vX.Y.Z] [--install-dir DIRECTORY]
 
-Installs Kact from a GitHub Release. The latest stable release is used unless
+Installs Kact from a GitHub Release. The latest release is used unless
 --version is supplied. Set KACT_INSTALL_DIR to change the default destination.
 EOF
 }
@@ -76,10 +79,27 @@ tar -xzf "$workdir/$asset" -C "$workdir/extract"
 binary=$(find "$workdir/extract" -type f -name kact -perm -u+x -print -quit)
 [[ -n "$binary" ]] || { printf 'Release archive does not contain an executable kact binary\n' >&2; exit 1; }
 
+[[ "$install_dir" != *$'\n'* && "$install_dir" != *$'\r'* ]] || {
+  printf 'Install directory cannot contain a newline\n' >&2
+  exit 2
+}
 mkdir -p "$install_dir"
+install_dir=$(cd "$install_dir" && pwd -P)
 temporary="$install_dir/.kact.$$"
 install -m 755 "$binary" "$temporary"
 mv -f "$temporary" "$install_dir/kact"
+if [[ $(uname -s) == Darwin ]]; then
+  identity=$(stat -f '%d %i' "$install_dir/kact")
+else
+  identity=$(stat -c '%d %i' "$install_dir/kact")
+fi
+read -r device inode <<< "$identity"
+mkdir -p "$state_dir"
+receipt="$state_dir/install-receipt"
+temporary_receipt="$receipt.$$"
+printf 'path=%s\ndevice=%s\ninode=%s\n' "$install_dir/kact" "$device" "$inode" > "$temporary_receipt"
+chmod 600 "$temporary_receipt"
+mv -f "$temporary_receipt" "$receipt"
 printf 'Installed kact to %s\n' "$install_dir/kact"
 "$install_dir/kact" --version
 case ":$PATH:" in

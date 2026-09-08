@@ -12,6 +12,7 @@ Run `kact COMMAND --help` for Clap’s argument help, for example `kact click --
 | Command | Purpose |
 | --- | --- |
 | `setup` | Create configuration, guide macOS Accessibility, and start the daemon. |
+| `uninstall [--purge]` | Remove a release-script installation; `--purge` also removes config, logs, and socket. |
 | `start` | Start the background daemon; safe to repeat. |
 | `daemon` | Run the daemon in the foreground. |
 | `service install` / `uninstall` | Configure macOS login startup. |

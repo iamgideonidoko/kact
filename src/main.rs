@@ -54,6 +54,7 @@ fn main() -> Result<()> {
     }
     Command::Service { command } => kact::service::configure(command, &absolute(&config_path)?, &absolute(&socket)?)?,
     Command::Setup => setup(&cli, &config_path, &socket)?,
+    Command::Uninstall { purge } => uninstall(&config_path, &socket, purge)?,
     Command::Start => start(&cli, &config_path, &socket)?,
     Command::Daemon => daemon(&cli, &config_path, &socket)?,
     command => print_reply(ipc::send(&socket, &command)?)?,
@@ -166,6 +167,40 @@ fn setup(cli: &Cli, config_path: &Path, socket: &Path) -> Result<()> {
   start(cli, config_path, socket)?;
   println!("Ready. Run `kact activate grid` to place the cursor with labels.");
   Ok(())
+}
+
+fn uninstall(config_path: &Path, socket: &Path, purge: bool) -> Result<()> {
+  let ownership = kact::installation::current_release()?;
+  #[cfg(target_os = "macos")]
+  kact::service::configure(
+    kact::command::ServiceCommand::Uninstall,
+    &absolute(config_path)?,
+    &absolute(socket)?,
+  )?;
+  let _ = ipc::send(socket, &Command::Quit);
+  match ownership {
+    kact::installation::Ownership::Managed(release) => {
+      println!("Removed {}", kact::installation::remove(release)?.display());
+    }
+    kact::installation::Ownership::NotManaged(message) => println!("{message} Left the binary unchanged."),
+  }
+  if purge {
+    remove_if_present(config_path)?;
+    remove_if_present(&config_path.with_extension("log"))?;
+    remove_if_present(socket)?;
+    println!("Removed configuration, logs, and socket.");
+  } else {
+    println!("Configuration and logs were kept. Run `kact uninstall --purge` to remove them.");
+  }
+  Ok(())
+}
+
+fn remove_if_present(path: &Path) -> Result<()> {
+  match std::fs::remove_file(path) {
+    Ok(()) => Ok(()),
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+    Err(error) => Err(error.into()),
+  }
 }
 
 #[cfg(target_os = "macos")]
