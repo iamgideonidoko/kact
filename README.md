@@ -1,6 +1,6 @@
 # Kact
 
-Control the cursor from your keyboard or shell. Written in Rust, with native macOS overlays and a local command service.
+Keyboard-driven cursor ACTuator. Written in Rust, with native macOS overlays and a local command service.
 
 - Grid labels and accessibility element labels jump directly to targets.
 - Freestyle mode provides movement without an overlay.

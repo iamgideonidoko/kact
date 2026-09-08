@@ -1,6 +1,6 @@
 # Kact
 
-> Kact is a Rust cursor actuator for macOS and Linux X11. Run one local daemon, then control the pointer through a CLI, optional native macOS navigation, or an external shortcut tool.
+> Kact is a keyboard-driven cursor ACTuator for macOS and Linux X11. Run one local daemon, then control the pointer through a CLI, optional native macOS navigation, or an external shortcut tool.
 
 Kact is command-first: global shortcuts are disabled by default. `move` and `move-to` are immediate; `--glide` animates a one-shot move; `move-start` and `move-stop` provide held directional motion. macOS provides overlays, accessibility targets, and keyboard capture. Linux X11 supports shell-driven pointer actions only. Wayland and Windows are unsupported.
 

@@ -3,7 +3,7 @@ title: Introduction
 description: What Kact does and how its command-first model works.
 ---
 
-Kact controls the pointer from the keyboard or a shell command. It is for people building keyboard-led desktop workflows who still need precise pointer movement, target selection, clicks, dragging, and scrolling.
+Kact is a keyboard-driven cursor ACTuator for people building keyboard-led desktop workflows who still need precise pointer movement, target selection, clicks, dragging, and scrolling.
 
 Kact is not a window manager or a general-purpose macro engine. It owns pointer actions. Your preferred shortcut tool can own activation.
 

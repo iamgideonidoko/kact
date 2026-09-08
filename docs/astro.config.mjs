@@ -9,7 +9,7 @@ export default defineConfig({
     mermaid({ autoTheme: true, enableLog: false }),
     starlight({
       title: 'Kact',
-      description: 'Documentation for Kact, a keyboard-driven cursor actuator for macOS and X11.',
+      description: 'Kact: Keyboard-driven cursor ACTuator.',
       favicon: '/kact.svg',
       logo: { src: './public/kact.svg', alt: 'Kact cursor logo' },
       social: [{ icon: 'github', label: 'Kact on GitHub', href: 'https://github.com/iamgideonidoko/kact' }],
