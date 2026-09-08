@@ -189,7 +189,13 @@ Automated tests cover config validation, movement timing, labels, state transiti
 - Measure and publish latency and idle/active resource use.
 - Add Developer ID signing and notarization for macOS releases.
 - Replace legacy Cocoa bindings before their transitive `block` dependency becomes incompatible with Rust.
-- Validate X11 behavior separately; Wayland and Windows need dedicated native implementations.
+- Improve Linux support through explicit, testable capabilities rather than a blanket platform claim.
+  - Harden X11 behavior across desktop environments and window managers; report the active session, display, XTest, and available capabilities through `kact doctor`.
+  - Add AT-SPI2 accessibility discovery for element targeting where applications expose accessible UI information.
+  - Add compositor-specific Wayland profiles, beginning with wlroots-based desktops such as Hyprland, for supported pointer actions.
+  - Support opt-in desktop global shortcuts through the XDG portal while keeping command and remapper integrations first-class.
+  - Add overlays and advanced input actions only where a compositor supplies a supported native path.
+- Add a dedicated native Windows implementation.
 - Add per-app profiles, macros, and a graphical configuration editor.
 
 ## Project documentation
