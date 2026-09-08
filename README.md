@@ -195,7 +195,13 @@ Automated tests cover config validation, movement timing, labels, state transiti
   - Add compositor-specific Wayland profiles, beginning with wlroots-based desktops such as Hyprland, for supported pointer actions.
   - Support opt-in desktop global shortcuts through the XDG portal while keeping command and remapper integrations first-class.
   - Add overlays and advanced input actions only where a compositor supplies a supported native path.
-- Add a dedicated native Windows implementation.
+- Add a dedicated native Windows implementation through explicit, testable capabilities.
+  - Add pointer movement, clicks, dragging, scrolling, and modified clicks; account for virtual-desktop coordinates, display scaling, and Windows integrity levels.
+  - Report the Windows session and available capabilities through `kact doctor`.
+  - Support opt-in modifier-based global shortcuts, then active-mode keyboard capture where it is reliable.
+  - Add per-display, click-through overlays for grid and element labels.
+  - Add UI Automation element targeting where applications expose accessible UI information.
+  - Ship Windows x86_64 release archives, a PowerShell installer, per-user startup support, and code signing.
 - Add per-app profiles, macros, and a graphical configuration editor.
 
 ## Project documentation
