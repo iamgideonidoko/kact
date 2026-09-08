@@ -21,4 +21,4 @@ make test
 make release
 ```
 
-Linux builds require `libx11-dev` and `libxtst-dev`. See the repository’s canonical [contribution guide](https://github.com/iamgideonidoko/kact/blob/main/CONTRIBUTING.md) for contribution expectations.
+Run `make coverage-core` after changing `src/core/`. For documentation changes, run `pnpm --dir docs run check` and `make docs-build`. Linux builds require `libx11-dev` and `libxtst-dev`. See the repository’s canonical [contribution guide](https://github.com/iamgideonidoko/kact/blob/main/CONTRIBUTING.md) for contribution expectations.

@@ -26,6 +26,6 @@ make test
 make release
 ```
 
-Run `make smoke` and `make smoke-mouse` after changing macOS overlays, accessibility, keyboard capture, or pointer injection. Update the README, relevant `docs/src/content/docs/` page, and `CHANGELOG.md` when user-facing behavior changes.
+Run `make coverage-core` after changing `src/core/`. Run `make smoke` and `make smoke-mouse` after changing macOS overlays, accessibility, keyboard capture, or pointer injection. Run `pnpm --dir docs run check` and `make docs-build` when changing the documentation site. Update the README, relevant `docs/src/content/docs/` page, and `CHANGELOG.md` when user-facing behavior changes.
 
 Keep changes focused, preserve command-first operation, and include tests for behavior that can regress.

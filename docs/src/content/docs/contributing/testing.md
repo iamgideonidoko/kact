@@ -9,6 +9,12 @@ make test
 make release
 ```
 
+After changing `src/core/`, also run:
+
+```sh
+make coverage-core
+```
+
 `make smoke` checks the macOS daemon, overlays, config reload, and shutdown without moving the pointer. `make smoke-mouse` opens a temporary test window to exercise real pointer actions and keyboard capture, then restores the pointer.
 
 Install the local reporter once with:
