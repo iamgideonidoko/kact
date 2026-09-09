@@ -13,6 +13,7 @@ Run `kact COMMAND --help` for Clap’s argument help, for example `kact click --
 | --- | --- |
 | `setup` | Create configuration, guide macOS Accessibility, and start the daemon. |
 | `uninstall [--purge]` | Remove a release-script installation; `--purge` also removes config, logs, and socket. |
+| `update [--check]` | Check for or install the latest verified release-script update. |
 | `start` | Start the background daemon; safe to repeat. |
 | `daemon` | Run the daemon in the foreground. |
 | `service install` / `uninstall` | Configure macOS login startup. |
@@ -35,6 +36,8 @@ kact quit       # stops the daemon
 ```
 
 `status` returns JSON including daemon state, pointer position when available, active navigation mode, whether held movement or a glide is active, configuration path, and enabled shortcut counts.
+
+`update` is available only when the current executable is the unmodified binary installed by Kact's release script. It reads the latest stable GitHub Release, verifies the matching archive against its published SHA-256 checksum, atomically replaces the binary, and restarts a running daemon. `update --check` performs only the release lookup. Update Homebrew, Cargo, and source-checkout installations with the tool that installed them.
 
 ## Navigation and motion
 

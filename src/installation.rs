@@ -19,6 +19,34 @@ pub struct Release {
   receipt: PathBuf,
 }
 
+impl Release {
+  pub fn binary(&self) -> &Path {
+    &self.binary
+  }
+
+  pub fn refresh_receipt(&self) -> Result<()> {
+    let metadata = fs::metadata(&self.binary)?;
+    let contents = format!(
+      "path={}\ndevice={}\ninode={}\n",
+      self.binary.display(),
+      metadata.dev(),
+      metadata.ino()
+    );
+    let temporary = self.receipt.with_extension(format!("{}.tmp", std::process::id()));
+    let mut file = std::fs::OpenOptions::new()
+      .write(true)
+      .create_new(true)
+      .open(&temporary)?;
+    use std::os::unix::fs::PermissionsExt;
+    file.set_permissions(fs::Permissions::from_mode(0o600))?;
+    use std::io::Write;
+    file.write_all(contents.as_bytes())?;
+    file.sync_all()?;
+    fs::rename(temporary, &self.receipt)?;
+    Ok(())
+  }
+}
+
 pub fn current_release() -> Result<Ownership> {
   let receipt_path = receipt_path();
   let receipt = match read_receipt(&receipt_path)? {

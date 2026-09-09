@@ -40,6 +40,8 @@ kact activate grid
 ```sh
 kact service install      # enable startup at the next login
 kact service uninstall    # remove login startup and unload the managed service
+kact update               # install the latest verified release and restart Kact
+kact update --check       # report whether a release update is available
 kact uninstall            # remove a release-script installation; keep config and logs
 kact uninstall --purge    # also remove config, logs, and socket
 ```

@@ -10,3 +10,4 @@ pub mod desktop;
 pub mod installation;
 pub mod ipc;
 pub mod service;
+pub mod update;

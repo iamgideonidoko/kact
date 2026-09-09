@@ -31,6 +31,12 @@ description: Diagnose Kact configuration, permission, service, and platform fail
 
 **Fix:** Use `kact stop` to halt continuous movement and release held mouse buttons. Use `kact deactivate` to hide navigation. Use `kact quit` to stop the background service.
 
+## `update` refuses this installation
+
+**Cause:** The executable was installed by Cargo, Homebrew, a source checkout, or has changed since Kact's release installer ran.
+
+**Fix:** Update it with the owning tool. `kact update` only replaces release-script installations after verifying their installation receipt and the downloaded release checksum.
+
 ## Linux cannot move the pointer
 
 **Cause:** There is no X11 display, XTest is missing, or the session is Wayland.

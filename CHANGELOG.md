@@ -4,6 +4,10 @@ All notable user-facing changes are recorded here.
 
 ## Unreleased
 
+### Added
+
+- `kact update` and `kact update --check` for verified updates of release-script installations.
+
 ## 0.1.0-rc.1
 
 ### Added

@@ -38,12 +38,15 @@ Ensure the destination is on `PATH`, then complete setup:
 kact setup
 ```
 
-To update, rerun the installer. It replaces the executable only after the download's checksum is verified. Restart a running service afterward:
+To update a release-script installation, run:
 
 ```sh
-kact quit
-kact setup
+kact update
 ```
+
+Kact finds the latest stable GitHub Release, verifies the matching archive against its published SHA-256 checksum, atomically replaces its executable, and restarts a running daemon. Check without changing anything with `kact update --check`.
+
+`kact update` accepts only an unmodified binary installed by the release script. Update Cargo, Homebrew, and source-checkout installations with their owning tool instead. You can still rerun the installer when you need a specific release tag.
 
 ## Uninstall
 

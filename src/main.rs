@@ -55,6 +55,7 @@ fn main() -> Result<()> {
     Command::Service { command } => kact::service::configure(command, &absolute(&config_path)?, &absolute(&socket)?)?,
     Command::Setup => setup(&cli, &config_path, &socket)?,
     Command::Uninstall { purge } => uninstall(&config_path, &socket, purge)?,
+    Command::Update { check } => update(&cli, &config_path, &socket, check)?,
     Command::Start => start(&cli, &config_path, &socket)?,
     Command::Daemon => daemon(&cli, &config_path, &socket)?,
     command => print_reply(ipc::send(&socket, &command)?)?,
@@ -191,6 +192,67 @@ fn uninstall(config_path: &Path, socket: &Path, purge: bool) -> Result<()> {
     println!("Removed configuration, logs, and socket.");
   } else {
     println!("Configuration and logs were kept. Run `kact uninstall --purge` to remove them.");
+  }
+  Ok(())
+}
+
+fn update(cli: &Cli, config_path: &Path, socket: &Path, check: bool) -> Result<()> {
+  let release = match kact::installation::current_release()? {
+    kact::installation::Ownership::Managed(release) => release,
+    kact::installation::Ownership::NotManaged(message) => {
+      bail!(
+        "{message} Update this installation with the tool that installed it (for example Homebrew, Cargo, or your source checkout)."
+      )
+    }
+  };
+  let latest = kact::update::latest_release()?;
+  let installed = format!("v{}", env!("CARGO_PKG_VERSION"));
+  if latest.tag == installed {
+    println!("Kact {installed} is up to date.");
+    return Ok(());
+  }
+  if check {
+    println!("Update available: {installed} → {}", latest.tag);
+    return Ok(());
+  }
+
+  let was_running = ipc::send(socket, &Command::Status).is_ok();
+  kact::update::install(&release, &latest)?;
+  println!("Updated Kact: {installed} → {}", latest.tag);
+  if was_running {
+    ipc::send(socket, &Command::Quit).context("Kact was updated but the running service could not be stopped")?;
+    wait_for_service_stop(socket)?;
+    let mut command = std::process::Command::new(release.binary());
+    command
+      .arg("--config")
+      .arg(absolute(config_path)?)
+      .arg("--socket")
+      .arg(absolute(socket)?);
+    if let Some(level) = &cli.log_level {
+      command.arg("--log-level").arg(level);
+    }
+    let output = command
+      .arg("start")
+      .output()
+      .context("Kact was updated but could not be restarted")?;
+    if !output.status.success() {
+      bail!(
+        "Kact was updated but could not be restarted: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+      );
+    }
+    print!("{}", String::from_utf8_lossy(&output.stdout));
+  }
+  Ok(())
+}
+
+fn wait_for_service_stop(socket: &Path) -> Result<()> {
+  let deadline = Instant::now() + Duration::from_secs(5);
+  while ipc::send(socket, &Command::Status).is_ok() {
+    if Instant::now() >= deadline {
+      bail!("Kact was updated but the running service did not stop; run `kact start` after it exits")
+    }
+    std::thread::sleep(Duration::from_millis(50));
   }
   Ok(())
 }

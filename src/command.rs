@@ -29,6 +29,13 @@ pub enum Command {
     #[serde(default)]
     purge: bool,
   },
+  /// Check for or install the latest verified release-script update
+  Update {
+    /// Report whether an update is available without changing the installation
+    #[arg(long)]
+    #[serde(default)]
+    check: bool,
+  },
   /// Start the background service (safe to repeat)
   Start,
   /// Run the service in the foreground
@@ -217,6 +224,7 @@ impl Command {
       command,
       Self::Setup
         | Self::Uninstall { .. }
+        | Self::Update { .. }
         | Self::Start
         | Self::Daemon
         | Self::Config { .. }

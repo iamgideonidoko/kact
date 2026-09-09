@@ -38,6 +38,7 @@ fn commands_are_discoverable_and_missing_service_is_actionable() {
   for name in [
     "setup",
     "uninstall",
+    "update",
     "activate",
     "move-start",
     "click",
