@@ -189,6 +189,11 @@ Automated tests cover config validation, movement timing, labels, state transiti
 - Measure and publish latency and idle/active resource use.
 - Add Developer ID signing and notarization for macOS releases.
 - Replace legacy Cocoa bindings before their transitive `block` dependency becomes incompatible with Rust.
+- Add `kact config init` presets and generate starter integrations for supported remappers and shells.
+- Add window-relative moves and glides for focused-window centers, edges, corners, and fractional positions.
+- Add held scrolling with the same normal, precise, and fast speed modes as held pointer movement.
+- Improve element targeting with role filters, minimum target sizes, deduplication, app-specific exclusions, and optional accessible names.
+- Extend `kact status` and `kact doctor` with permissions, enabled bindings, display details, and supported capabilities.
 - Improve Linux support through explicit, testable capabilities rather than a blanket platform claim.
   - Harden X11 behavior across desktop environments and window managers; report the active session, display, XTest, and available capabilities through `kact doctor`.
   - Add AT-SPI2 accessibility discovery for element targeting where applications expose accessible UI information.
