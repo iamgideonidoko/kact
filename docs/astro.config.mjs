@@ -22,7 +22,7 @@ export default defineConfig({
         { label: 'Configuration', items: ['configuration/overview', 'configuration/keybindings'] },
         { label: 'Reference', items: ['reference/cli', 'reference/filesystem-and-environment'] },
         { label: 'Help', items: ['help/troubleshooting', 'help/faq'] },
-        { label: 'Contributing', items: ['contributing/development', 'contributing/architecture', 'contributing/decisions', 'contributing/testing', 'contributing/security', 'contributing/changelog'] }
+        { label: 'Contributing', items: ['contributing/development', 'contributing/architecture', 'contributing/decisions', 'contributing/testing', 'contributing/security', 'contributing/changelog', 'contributing/releasing'] }
       ]
     })
   ]
