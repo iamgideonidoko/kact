@@ -16,11 +16,11 @@ macOS is the primary platform. Linux X11 supports shell-driven mouse actions; na
 Published binaries are installed from GitHub Releases:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash # -- --version vX.Y.Z
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash # latest release
 kact setup
 ```
 
-The command installs the latest release. Remove `#` and replace `vX.Y.Z` with a tag to select a specific release. The installer selects the macOS Apple Silicon, macOS Intel, or Linux x86_64 archive, verifies its SHA-256 checksum before installing, and writes only to `~/.local/bin` by default. Current macOS releases are unsigned and unnotarized, so macOS may ask for confirmation before the first run. See the [installation guide](https://iamgideonidoko.github.io/kact/getting-started/installation/) for source builds, updates, and supported platforms.
+The command installs the latest release. To select a specific tag, use `bash -s -- --version vX.Y.Z` after the pipe. The installer selects the macOS Apple Silicon, macOS Intel, or Linux x86_64 archive, verifies its SHA-256 checksum before installing, and writes only to `~/.local/bin` by default. Current macOS releases are unsigned and unnotarized, so macOS may ask for confirmation before the first run. See the [installation guide](https://iamgideonidoko.github.io/kact/getting-started/installation/) for source builds, updates, and supported platforms.
 
 ## Build from source
 

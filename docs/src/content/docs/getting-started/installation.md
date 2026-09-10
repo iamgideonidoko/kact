@@ -16,11 +16,11 @@ Kact ships release archives through GitHub Releases. The installer downloads the
 The latest release installs with:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash # -- --version vX.Y.Z
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash # latest release
 kact --version
 ```
 
-The command installs the latest release. Remove `#` and replace `vX.Y.Z` with a tag to select a specific release:
+The command installs the latest release. To select a specific tag, pass its version through `bash -s --`:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash -s -- --version vX.Y.Z
