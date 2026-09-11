@@ -2,7 +2,7 @@ APP := kact
 CARGO := cargo
 
 .PHONY: help build release package publish run run-release fmt clippy clippy-warn test check coverage coverage-core doc clean install lint docs docs-build docs-preview \
-	config-init doctor setup uninstall daemon start status grid elements freestyle deactivate stop quit reload smoke smoke-mouse
+	config-init doctor setup uninstall daemon start status grid elements freestyle deactivate stop quit reload smoke smoke-mouse smoke-elements
 
 help:
 	@printf "Available targets:\n"
@@ -36,6 +36,7 @@ help:
 	@printf "  make reload         - Reload configuration\n"
 	@printf "  make smoke          - Run native overlay/service smoke check\n"
 	@printf "  make smoke-mouse    - Run native mouse/keyboard smoke check\n"
+	@printf "  make smoke-elements - Run native accessibility-element smoke check\n"
 	@printf "  make clean          - Clean build artifacts\n"
 	@printf "  make install        - Install the binary locally (cargo install --path .)\n"
 	@printf "  make docs           - Run the documentation site locally\n"
@@ -151,3 +152,6 @@ smoke: build
 
 smoke-mouse: build
 	python3 scripts/smoke_mouse_macos.py target/debug/$(APP)
+
+smoke-elements: build
+	python3 scripts/smoke_elements_macos.py target/debug/$(APP)
