@@ -132,9 +132,13 @@ unsafe extern "C" fn callback(_proxy: *mut c_void, kind: u32, event: EventRef, d
     if let Some(mut input) = original {
       if !pressed {
         state.captured.remove(&code);
+      } else if !repeat {
+        // Duplicate key-down events are possible around event-tap ownership
+        // changes. They are not OS autorepeat and must not repeat an action.
+        return std::ptr::null_mut();
       }
       input.pressed = pressed;
-      input.repeat = pressed;
+      input.repeat = repeat;
       if state.tx.try_send(input).is_err() {
         state.failed.store(true, Ordering::Release);
       }
@@ -588,6 +592,7 @@ mod tests {
   use super::*;
   unsafe extern "C" {
     fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, pressed: bool) -> EventRef;
+    fn CGEventSetIntegerValueField(event: EventRef, field: u32, value: i64);
   }
   #[test]
   fn captured_events_keep_original_chord_through_repeat_and_deactivation() {
@@ -616,6 +621,7 @@ mod tests {
     unsafe {
       let press = CGEventCreateKeyboardEvent(std::ptr::null(), 40, true);
       assert!(!press.is_null());
+      CGEventSetIntegerValueField(press, EventField::KEYBOARD_EVENT_AUTOREPEAT, 1);
       assert!(callback(std::ptr::null_mut(), 10, press, (&mut state as *mut TapState).cast()).is_null());
       CFRelease(press.cast());
       let repeated = rx.try_recv().unwrap();

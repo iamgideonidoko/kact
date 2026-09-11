@@ -42,12 +42,28 @@ window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 window.makeKeyAndOrderFront(nil)
 window.makeFirstResponder(window.contentView)
 application.activate(ignoringOtherApps: true)
-DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-    let point = window.convertPoint(toScreen: NSPoint(x: 250, y: 120))
-    emit(["ready": true, "x": point.x, "y": screen.frame.height - point.y,
+func announceWhenFocused(_ attempts: Int = 0) {
+    application.activate(ignoringOtherApps: true)
+    guard window.isKeyWindow,
+          NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier else {
+        if attempts < 30 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { announceWhenFocused(attempts + 1) }
+        }
+        return
+    }
+    guard let info = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber)) as? [[String: Any]],
+          let dictionary = info.first,
+          let boundsValue = dictionary[kCGWindowBounds as String] else {
+        return
+    }
+    let bounds = boundsValue as! CFDictionary
+    var rect = CGRect.zero
+    guard CGRectMakeWithDictionaryRepresentation(bounds, &rect) else { return }
+    emit(["ready": true, "x": rect.midX, "y": rect.midY,
           "key": window.isKeyWindow, "visible": window.occlusionState.contains(.visible),
           "frontmost": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0,
           "pid": ProcessInfo.processInfo.processIdentifier,
           "original_x": original.x, "original_y": original.y])
 }
+DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { announceWhenFocused() }
 application.run()
