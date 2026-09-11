@@ -7,6 +7,7 @@ All notable user-facing changes are recorded here.
 ### Added
 
 - `kact update` and `kact update --check` for verified updates of release-script installations.
+- Dependabot and CodeQL automation, pinned GitHub Actions, and repository security and contributor policies.
 
 ## 0.1.0-rc.1
 

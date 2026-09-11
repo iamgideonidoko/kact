@@ -213,7 +213,7 @@ Automated tests cover config validation, movement timing, labels, state transiti
 
 ## Project documentation
 
-- [Contributing](CONTRIBUTING.md), [security policy](SECURITY.md), and [changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md), [Code of Conduct](CODE_OF_CONDUCT.md), [support](SUPPORT.md), [security policy](SECURITY.md), and [changelog](CHANGELOG.md)
 - [Documentation site](https://iamgideonidoko.github.io/kact/) for installation, configuration, CLI reference, troubleshooting, and contributor guides
 - [Documentation source](docs/) for local preview and documentation changes
 

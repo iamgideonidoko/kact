@@ -8,7 +8,7 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - env:
           TAG: ${{ github.ref_name }}
         run: |
@@ -22,7 +22,7 @@ jobs:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev
       - run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy && rustup default 1.88.0
@@ -34,21 +34,21 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev
       - run: rustup toolchain install 1.88.0 --profile minimal --component llvm-tools-preview && rustup default 1.88.0
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@d163c8a87a9ec7b9fc90aafe588cf5a89c736cf4 # cargo-llvm-cov
       - run: cargo llvm-cov --locked --all-targets --json --summary-only --output-path target/coverage.json
       - run: python3 scripts/check_core_coverage.py target/coverage.json
   docs:
     needs: prepare
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: pnpm
@@ -68,13 +68,13 @@ jobs:
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libx11-dev libxtst-dev
       - run: rustup toolchain install 1.88.0 --profile minimal && rustup default 1.88.0
       - run: rustup target add ${{ matrix.target }}
       - run: scripts/package-release.sh --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: kact-${{ matrix.target }}
           path: dist/
@@ -83,8 +83,8 @@ jobs:
     needs: [prepare, package]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
           merge-multiple: true
