@@ -25,6 +25,7 @@ pub struct Runtime {
   listener: Option<Box<dyn InputListener>>,
   active: Arc<AtomicBool>,
   labels_active: Arc<AtomicBool>,
+  scroll_activity: Arc<AtomicBool>,
   mode: Option<NavigationMode>,
   navigation_config: NavigationConfig,
   appearance: AppearanceConfig,
@@ -43,7 +44,7 @@ pub struct Runtime {
   element_generation: u64,
   refresh_generation: Option<u64>,
   next_element_poll: Option<Instant>,
-  element_poll_interval: Duration,
+  element_poll_remaining: u8,
   element_filter: Option<String>,
   cycle: usize,
   labels_visible: bool,
@@ -73,6 +74,7 @@ impl Runtime {
       listener: None,
       active: Arc::new(AtomicBool::new(false)),
       labels_active: Arc::new(AtomicBool::new(false)),
+      scroll_activity: Arc::new(AtomicBool::new(false)),
       mode: None,
       navigation_config,
       appearance,
@@ -91,7 +93,7 @@ impl Runtime {
       element_generation: 0,
       refresh_generation: None,
       next_element_poll: None,
-      element_poll_interval: Duration::from_millis(333),
+      element_poll_remaining: 0,
       element_filter: None,
       cycle: 0,
       labels_visible: true,
@@ -128,6 +130,7 @@ impl Runtime {
       },
       labels_active: Arc::clone(&self.labels_active),
       active: Arc::clone(&self.active),
+      scroll_activity: Arc::clone(&self.scroll_activity),
     };
     let mut listener = platform::create_input_listener(options)?;
     listener.start()?;
@@ -236,9 +239,8 @@ impl Runtime {
     }
     self.refresh_at = None;
     self.refresh_generation = None;
-    self.next_element_poll =
-      (actual_mode == NavigationMode::Elements).then(|| Instant::now() + Duration::from_millis(333));
-    self.element_poll_interval = Duration::from_millis(333);
+    self.next_element_poll = None;
+    self.element_poll_remaining = 0;
     self.element_filter = None;
     self.selected = None;
     self.state.active = true;
@@ -308,6 +310,7 @@ impl Runtime {
     self.refresh_at = None;
     self.refresh_generation = None;
     self.next_element_poll = None;
+    self.element_poll_remaining = 0;
     self.navigation = None;
     self.selected = None;
     if let Some(desktop) = self.desktop.as_mut() {
@@ -631,15 +634,11 @@ impl Runtime {
     self.refresh_at = Some(Instant::now() + Duration::from_millis(120));
     self.next_element_poll = None;
     self.selected = None;
-    self.labels_active.store(false, Ordering::Release);
-    if let Some(desktop) = self.desktop.as_mut() {
-      desktop.hide();
-    }
   }
 
   /// Rebuilds target geometry without reactivating input or resetting mode state.
   /// `expected_generation` prevents an obsolete deferred refresh from becoming actionable.
-  fn refresh_elements_for(&mut self, expected_generation: Option<u64>) -> Result<bool> {
+  fn refresh_elements_for(&mut self, expected_generation: Option<u64>, schedule_probe: bool) -> Result<bool> {
     if self.mode != Some(NavigationMode::Elements) {
       bail!("refresh requires element navigation");
     }
@@ -681,6 +680,15 @@ impl Runtime {
       })
       .unwrap_or_default();
     let changed = previous != targets;
+    if !changed {
+      self.refresh_at = None;
+      self.refresh_generation = None;
+      if schedule_probe {
+        self.element_poll_remaining = 2;
+        self.next_element_poll = Some(Instant::now() + Duration::from_millis(400));
+      }
+      return Ok(false);
+    }
     let prefix = (!changed)
       .then(|| self.navigation.as_ref().map(|navigation| navigation.prefix.clone()))
       .flatten();
@@ -693,14 +701,16 @@ impl Runtime {
     self.navigation = Some(navigation);
     self.refresh_at = None;
     self.refresh_generation = None;
-    self.labels_active.store(true, Ordering::Release);
-    self.next_element_poll = Some(Instant::now() + self.element_poll_interval);
+    if schedule_probe {
+      self.element_poll_remaining = 2;
+      self.next_element_poll = Some(Instant::now() + Duration::from_millis(400));
+    }
     self.render()?;
     Ok(changed)
   }
 
   fn refresh_elements(&mut self) -> Result<()> {
-    self.refresh_elements_for(None)?;
+    self.refresh_elements_for(None, false)?;
     Ok(())
   }
 
@@ -818,11 +828,12 @@ impl Runtime {
 
   pub fn poll(&mut self) -> Result<()> {
     let mut element_changed = false;
+    let scrolled = self.scroll_activity.swap(false, Ordering::AcqRel);
     if let Some(desktop) = self.desktop.as_mut() {
       desktop.pump();
       element_changed = self.mode == Some(NavigationMode::Elements) && desktop.take_element_refresh_requested();
     }
-    if element_changed {
+    if element_changed || scrolled {
       self.mark_elements_dirty();
     }
     for _ in 0..256 {
@@ -847,7 +858,7 @@ impl Runtime {
     if let Some(deadline) = self.refresh_at.filter(|deadline| now >= *deadline) {
       let generation = self.refresh_generation;
       // A later input event can supersede this deadline; never apply its scan.
-      if let Err(error) = self.refresh_elements_for(generation) {
+      if let Err(error) = self.refresh_elements_for(generation, true) {
         tracing::debug!(%error, "Element refresh failed");
         if self.mode == Some(NavigationMode::Elements) && self.refresh_at == Some(deadline) {
           self.refresh_at = Some(now + Duration::from_millis(250));
@@ -855,17 +866,21 @@ impl Runtime {
       }
     } else if self.mode == Some(NavigationMode::Elements)
       && self.refresh_at.is_none()
+      && self.element_poll_remaining > 0
       && self.next_element_poll.is_some_and(|deadline| now >= deadline)
     {
-      // AX notifications are not reliable across Chromium/Electron. Bounded
-      // fallback polling detects geometry changes only while labels are active.
-      match self.refresh_elements_for(None) {
-        Ok(true) => self.element_poll_interval = Duration::from_millis(333),
-        Ok(false) => self.element_poll_interval = (self.element_poll_interval * 2).min(Duration::from_secs(1)),
+      // Some browsers publish layout after their first AX event. Confirm only
+      // twice, then stay idle until another real signal instead of rescanning
+      // and redrawing forever.
+      self.element_poll_remaining -= 1;
+      match self.refresh_elements_for(None, false) {
+        Ok(_) if self.refresh_at.is_none() && self.element_poll_remaining > 0 => {
+          self.next_element_poll = Some(now + Duration::from_millis(400));
+        }
+        Ok(_) => self.next_element_poll = None,
         Err(error) => {
-          tracing::debug!(%error, "Element fallback poll failed");
-          self.element_poll_interval = (self.element_poll_interval * 2).min(Duration::from_secs(1));
-          self.next_element_poll = Some(now + self.element_poll_interval);
+          tracing::debug!(%error, "Element settle probe failed");
+          self.next_element_poll = (self.element_poll_remaining > 0).then(|| now + Duration::from_millis(400));
         }
       }
     }
@@ -1013,6 +1028,7 @@ mod tests {
       listener: None,
       active: Arc::new(AtomicBool::new(false)),
       labels_active: Arc::new(AtomicBool::new(false)),
+      scroll_activity: Arc::new(AtomicBool::new(false)),
       mode: None,
       navigation_config,
       appearance,
@@ -1031,7 +1047,7 @@ mod tests {
       element_generation: 0,
       refresh_generation: None,
       next_element_poll: None,
-      element_poll_interval: Duration::from_millis(333),
+      element_poll_remaining: 0,
       element_filter: None,
       cycle: 0,
       labels_visible: true,
@@ -1085,7 +1101,7 @@ mod tests {
     runtime.mark_elements_dirty();
     let first = runtime.refresh_generation;
     assert!(runtime.refresh_at.is_some());
-    assert!(!runtime.labels_active.load(Ordering::Acquire));
+    assert!(runtime.labels_active.load(Ordering::Acquire));
     assert!(runtime.execute(Command::Select { label: "a".into() }).is_err());
     runtime.mark_elements_dirty();
     assert_ne!(runtime.refresh_generation, first);
@@ -1096,7 +1112,7 @@ mod tests {
     grid(&mut runtime);
     runtime.mode = Some(NavigationMode::Elements);
     runtime.refresh_generation = Some(2);
-    assert!(!runtime.refresh_elements_for(Some(1)).unwrap());
+    assert!(!runtime.refresh_elements_for(Some(1), false).unwrap());
     assert_eq!(runtime.refresh_generation, Some(2));
     assert!(!runtime.labels_active.load(Ordering::Acquire));
   }

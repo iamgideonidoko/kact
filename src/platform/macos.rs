@@ -122,6 +122,14 @@ unsafe extern "C" fn callback(_proxy: *mut c_void, kind: u32, event: EventRef, d
       state.failed.store(true, Ordering::Release);
       return event;
     }
+    // Observe wheel activity without consuming it. This covers web views that
+    // fail to send AX layout notifications while preserving native scrolling.
+    if kind == 22 {
+      if state.options.active.load(Ordering::Acquire) {
+        state.options.scroll_activity.store(true, Ordering::Release);
+      }
+      return event;
+    }
     if event.is_null() || !matches!(kind, 10 | 11) {
       return event;
     }
@@ -347,7 +355,7 @@ impl InputListener for MacOSInputListener {
           1,
           0,
           0,
-          (1 << 10) | (1 << 11),
+          (1 << 10) | (1 << 11) | (1 << 22),
           callback,
           (&mut *state as *mut TapState).cast(),
         )
@@ -604,6 +612,7 @@ mod tests {
         label_keys: Vec::new(),
         labels_active: Arc::new(AtomicBool::new(false)),
         active: Arc::new(AtomicBool::new(false)),
+        scroll_activity: Arc::new(AtomicBool::new(false)),
       },
       tx,
       failed: Arc::new(AtomicBool::new(false)),
@@ -648,6 +657,7 @@ mod tests {
         label_keys: Vec::new(),
         labels_active: Arc::new(AtomicBool::new(false)),
         active: Arc::new(AtomicBool::new(false)),
+        scroll_activity: Arc::new(AtomicBool::new(false)),
       },
       tx,
       failed: Arc::new(AtomicBool::new(false)),
@@ -669,5 +679,29 @@ mod tests {
       CFRelease(release.cast());
     }
     assert!(state.failed.load(Ordering::Acquire));
+  }
+  #[test]
+  fn wheel_activity_is_passed_through_and_marks_refresh() {
+    let (tx, _rx) = bounded(1);
+    let scroll_activity = Arc::new(AtomicBool::new(false));
+    let mut state = TapState {
+      options: InputOptions {
+        global_shortcuts: Vec::new(),
+        navigation_keys: Vec::new(),
+        label_keys: Vec::new(),
+        labels_active: Arc::new(AtomicBool::new(true)),
+        active: Arc::new(AtomicBool::new(true)),
+        scroll_activity: Arc::clone(&scroll_activity),
+      },
+      tx,
+      failed: Arc::new(AtomicBool::new(false)),
+      captured: HashMap::new(),
+    };
+    let event = 1usize as EventRef;
+    assert_eq!(
+      unsafe { callback(std::ptr::null_mut(), 22, event, (&mut state as *mut TapState).cast()) },
+      event
+    );
+    assert!(scroll_activity.load(Ordering::Acquire));
   }
 }

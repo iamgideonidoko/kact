@@ -542,11 +542,14 @@ impl Desktop {
 
   fn refresh_elements(&mut self, pid: Option<i32>) -> anyhow::Result<Vec<Rect>> {
     let mut scan = discover_elements(pid)?;
-    // Chromium/Electron often build their tree only after AX is queried. Ask once
-    // per process after an empty scan; never enable screen-reader compatibility.
-    if scan.skeletal() && self.manual_accessibility_pids.insert(scan.pid) {
+    // Chromium/Electron can expose browser chrome before their web viewport is
+    // hydrated. AXManualAccessibility requests that tree once per process; it
+    // is narrower than enhanced UI/screen-reader emulation.
+    if (scan.skeletal() || scan.info.web_areas > 0 && scan.info.truncated)
+      && self.manual_accessibility_pids.insert(scan.pid)
+    {
       unsafe { set_bool_attribute(scan.app.0, "AXManualAccessibility", true) };
-      std::thread::sleep(Duration::from_millis(60));
+      std::thread::sleep(Duration::from_millis(120));
       scan = discover_elements(Some(scan.pid))?;
     }
     if scan.skeletal() && self.visual_fallback {
@@ -567,6 +570,12 @@ impl Desktop {
       }));
     }
     scan.info.manual_accessibility_enabled = self.manual_accessibility_pids.contains(&scan.pid);
+    // Never replace a coherent overlay with a time-bounded partial traversal.
+    // Hover effects and asynchronous browser trees commonly hit this path.
+    if scan.info.truncated && !self.elements.is_empty() {
+      self.last_scan = Some(scan.info);
+      return Ok(self.elements.iter().map(|target| target.bounds).collect());
+    }
     self.last_scan = Some(scan.info);
     self.elements = scan.targets;
     Ok(self.elements.iter().map(|target| target.bounds).collect())
@@ -633,6 +642,18 @@ fn clipped(a: Rect, b: Rect) -> Option<Rect> {
   let width = (a.x + a.width).min(b.x + b.width) - x;
   let height = (a.y + a.height).min(b.y + b.height) - y;
   (width > 1.0 && height > 1.0).then_some(Rect { x, y, width, height })
+}
+
+/// Accessibility coordinates may contain sub-point jitter between otherwise
+/// identical scans. Canonical points keep target identity and label assignment
+/// stable while remaining well below pointer-placement precision.
+fn stable_bounds(bounds: Rect) -> Rect {
+  Rect {
+    x: bounds.x.round(),
+    y: bounds.y.round(),
+    width: bounds.width.round(),
+    height: bounds.height.round(),
+  }
 }
 
 fn intersects(a: Rect, b: Rect) -> bool {
@@ -704,23 +725,11 @@ unsafe fn create_element_observer(
   let observer = OwnedCf(observer);
   let context = (dirty as *const ElementDirty).cast_mut().cast();
   let mut registered = false;
-  for name in [
-    "AXFocusedWindowChanged",
-    "AXFocusedUIElementChanged",
-    "AXMainWindowChanged",
-  ] {
+  for name in ["AXFocusedWindowChanged", "AXMainWindowChanged"] {
     registered |=
       unsafe { AXObserverAddNotification(observer.0, app, CFString::new(name).as_concrete_TypeRef(), context) == 0 };
   }
-  for name in [
-    "AXMoved",
-    "AXResized",
-    "AXValueChanged",
-    "AXSelectedChildrenChanged",
-    "AXSelectedRowsChanged",
-    "AXLayoutChanged",
-    "AXUIElementDestroyed",
-  ] {
+  for name in ["AXMoved", "AXResized", "AXLayoutChanged", "AXUIElementDestroyed"] {
     registered |=
       unsafe { AXObserverAddNotification(observer.0, window, CFString::new(name).as_concrete_TypeRef(), context) == 0 };
   }
@@ -911,6 +920,7 @@ struct ScanInfo {
   manual_accessibility_enabled: bool,
   web_searches: usize,
   web_search_results: usize,
+  web_areas: usize,
 }
 
 fn record_rejection(reasons: &mut BTreeMap<&'static str, usize>, reason: &'static str) {
@@ -924,23 +934,6 @@ const ACTIONABLE_ACTIONS: &[&str] = &[
   "AXIncrement",
   "AXDecrement",
   "AXRaise",
-];
-
-// Some apps (notably Electron) publish control roles before they expose their
-// action list. Keep these as a lower-ranked compatibility fallback; generic
-// containers still require an action so presentation nodes do not get labels.
-const CONTROL_ROLES: &[&str] = &[
-  "AXButton",
-  "AXCheckBox",
-  "AXRadioButton",
-  "AXLink",
-  "AXComboBox",
-  "AXPopUpButton",
-  "AXSlider",
-  "AXTab",
-  "AXMenuItem",
-  "AXDisclosureTriangle",
-  "AXCell",
 ];
 
 fn actions(element: CFTypeRef) -> Vec<String> {
@@ -1031,7 +1024,13 @@ fn comparable_rect(a: Rect, b: Rect) -> bool {
   intersection >= (a.width * a.height).min(b.width * b.height) * 0.95
 }
 
-fn score(role: &str, actions: &[String], named: bool, bounds: Rect) -> i32 {
+fn has_supported_action(actions: &[String]) -> bool {
+  actions
+    .iter()
+    .any(|action| ACTIONABLE_ACTIONS.contains(&action.as_str()))
+}
+
+fn score(actions: &[String], named: bool, bounds: Rect) -> i32 {
   let action_score = if actions.iter().any(|action| action == "AXPress") {
     100
   } else if actions
@@ -1039,10 +1038,6 @@ fn score(role: &str, actions: &[String], named: bool, bounds: Rect) -> i32 {
     .any(|action| ACTIONABLE_ACTIONS.contains(&action.as_str()))
   {
     80
-  } else if matches!(role, "AXTextField" | "AXTextArea" | "AXComboBox" | "AXSlider") {
-    50
-  } else if CONTROL_ROLES.contains(&role) {
-    40
   } else {
     0
   };
@@ -1095,7 +1090,9 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
     let window_role = string_attribute(root.0, "AXRole").unwrap_or_default();
     let started = Instant::now();
     let budget = Duration::from_millis(350);
-    let mut queue = VecDeque::from([(root, 0usize, root_bounds)]);
+    // AX visible-search already returns flattened web descendants. Expanding
+    // each result again turns one viewport into an unbounded browser-tree walk.
+    let mut queue = VecDeque::from([(root, 0usize, root_bounds, true)]);
     let mut visited = 0usize;
     let mut candidates = 0usize;
     let mut accepted = 0usize;
@@ -1103,14 +1100,18 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
     let mut truncated = false;
     let mut web_searches = 0usize;
     let mut web_search_results = 0usize;
+    let mut web_areas = 0usize;
     let mut targets = Vec::new();
-    while let Some((node, depth, mut clip)) = queue.pop_front() {
+    while let Some((node, depth, mut clip, expand_children)) = queue.pop_front() {
       if visited >= 4000 || started.elapsed() >= budget {
         truncated = true;
         break;
       }
       visited += 1;
       let role = string_attribute(node.0, "AXRole").unwrap_or_default();
+      if role == "AXWebArea" {
+        web_areas += 1;
+      }
       if bool_attribute(node.0, "AXHidden") == Some(true) {
         record_rejection(&mut rejected, "hidden");
         continue;
@@ -1125,11 +1126,7 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         }
       }
       let actions = actions(node.0);
-      let actionable = actions
-        .iter()
-        .any(|action| ACTIONABLE_ACTIONS.contains(&action.as_str()))
-        || CONTROL_ROLES.contains(&role.as_str())
-        || matches!(role.as_str(), "AXTextField" | "AXTextArea");
+      let actionable = has_supported_action(&actions);
       if actionable {
         candidates += 1;
       }
@@ -1144,7 +1141,8 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
             .filter_map(|name| string_attribute(node.0, name))
             .filter(|value| !value.trim().is_empty())
             .collect::<Vec<_>>();
-          let score = score(&role, &actions, !text.is_empty(), bounds);
+          let bounds = stable_bounds(bounds);
+          let score = score(&actions, !text.is_empty(), bounds);
           if score > 0 {
             accepted += 1;
             targets.push(Element {
@@ -1166,6 +1164,9 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
       } else {
         record_rejection(&mut rejected, "missing-bounds");
       }
+      if !expand_children {
+        continue;
+      }
       if depth >= 32 || started.elapsed() >= budget {
         if !queue.is_empty() {
           truncated = true;
@@ -1173,10 +1174,15 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         continue;
       }
       let remaining = 4000usize.saturating_sub(visited + queue.len());
+      let mut flattened_web_results = false;
       let mut descendants = if role == "AXWebArea" {
         web_searches += 1;
-        let matches = web_search_children(node.0, remaining.min(512));
+        // This public visible-only query returns every candidate in viewport.
+        // Its results are terminal: recursively walking each one would turn a
+        // bounded viewport query back into an unbounded browser-tree walk.
+        let matches = web_search_children(node.0, remaining);
         web_search_results += matches.len();
+        flattened_web_results = !matches.is_empty();
         matches
       } else if matches!(role.as_str(), "AXTable" | "AXOutline") {
         children(node.0, "AXVisibleRows", remaining)
@@ -1190,7 +1196,7 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         descendants = children(node.0, "AXChildren", remaining);
       }
       for child in descendants {
-        queue.push_back((child, depth + 1, clip));
+        queue.push_back((child, depth + 1, clip, !flattened_web_results));
       }
     }
     targets.sort_by_key(|target| (-(target.depth as isize), -(target.score as isize)));
@@ -1205,7 +1211,9 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         record_rejection(&mut rejected, "duplicate-bounds");
       }
     }
-    deduplicated.sort_by_key(|target| -target.score);
+    // AX child order is not stable in browsers. Labels must follow a stable
+    // reading order, never traversal timing or action-score ties.
+    sort_targets(&mut deduplicated);
     Ok(Discovery {
       app,
       pid: actual_pid,
@@ -1222,9 +1230,23 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         manual_accessibility_enabled: false,
         web_searches,
         web_search_results,
+        web_areas,
       },
     })
   }
+}
+
+fn sort_targets(targets: &mut [Element]) {
+  targets.sort_by(|a, b| {
+    a.bounds
+      .y
+      .total_cmp(&b.bounds.y)
+      .then_with(|| a.bounds.x.total_cmp(&b.bounds.x))
+      .then_with(|| a.bounds.height.total_cmp(&b.bounds.height))
+      .then_with(|| a.bounds.width.total_cmp(&b.bounds.width))
+      .then_with(|| a.role.cmp(&b.role))
+      .then_with(|| a.actions.cmp(&b.actions))
+  });
 }
 
 #[cfg(test)]
@@ -1325,7 +1347,22 @@ mod tests {
       width: 40.0,
       height: 20.0,
     };
-    assert!(score("AXGroup", &["AXPress".into()], true, bounds) > score("AXButton", &[], true, bounds));
+    assert!(score(&["AXPress".into()], true, bounds) > score(&["AXShowMenu".into()], true, bounds));
+    assert!(!has_supported_action(&[]));
+    assert_eq!(
+      stable_bounds(Rect {
+        x: 10.49,
+        y: 20.51,
+        width: 40.49,
+        height: 20.51,
+      }),
+      Rect {
+        x: 10.0,
+        y: 21.0,
+        width: 40.0,
+        height: 21.0,
+      }
+    );
     assert!(comparable_rect(
       bounds,
       Rect {
@@ -1344,7 +1381,7 @@ mod tests {
         height: 20.0,
       }
     ));
-    assert!(score("AXButton", &[], false, bounds) > score("AXGroup", &[], false, bounds));
+    assert_eq!(score(&[], false, bounds), 5);
   }
   #[test]
   fn semantic_filter_normalizes_case_and_whitespace_and_includes_role() {
