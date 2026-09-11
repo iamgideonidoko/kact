@@ -29,6 +29,7 @@ pub struct Rect {
 pub struct Target {
   pub label: String,
   pub bounds: Rect,
+  pub focused: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +41,7 @@ pub struct Appearance {
   pub opacity: f64,
   pub grid_lines: bool,
   pub label_position: LabelPosition,
+  pub visual_targets: bool,
 }
 
 impl Default for Appearance {
@@ -52,6 +54,7 @@ impl Default for Appearance {
       opacity: 0.85,
       grid_lines: true,
       label_position: LabelPosition::Center,
+      visual_targets: false,
     }
   }
 }
@@ -74,6 +77,13 @@ impl Desktop {
   }
   pub fn elements(&self) -> anyhow::Result<Vec<Rect>> {
     anyhow::bail!("Accessibility targeting currently requires macOS")
+  }
+  pub fn set_enhanced_user_interface(&mut self, _: bool) -> anyhow::Result<()> {
+    anyhow::bail!("Accessibility targeting currently requires macOS")
+  }
+  pub fn set_visual_fallback(&mut self, _: bool) {}
+  pub fn matching_elements(&self, _: &str) -> Vec<Rect> {
+    vec![]
   }
   pub fn focus_token(&self) -> anyhow::Result<String> {
     anyhow::bail!("Focus tracking currently requires macOS")

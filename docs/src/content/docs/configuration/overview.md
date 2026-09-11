@@ -83,6 +83,24 @@ log_level = "info"     # error | warn | info | debug | trace | off
 
 `auto_click` clicks after a completed target selection. `rows`, `columns`, and `alphabet` control grid labels. `label_position` places labels inside their target; corner positions fall back to center for small targets. `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` are optional sparse overrides: each omitted field inherits its global value. Appearance settings apply to macOS overlays. `target_fps` controls runtime polling while pointer motion is active. `[glide]` controls the duration and profile for opt-in one-shot cursor animation.
 
+For a browser with a confirmed incomplete accessibility tree, enable this compatibility option only for elements mode:
+
+```toml
+[navigation.elements]
+enhanced_user_interface = true
+```
+
+It is disabled by default because screen-reader emulation can change browser behavior and add overhead.
+
+For an app whose main UI is not exposed through Accessibility, opt into the separate OCR fallback:
+
+```toml
+[navigation.elements]
+visual_fallback = true
+```
+
+It runs only after a skeletal Accessibility scan, requires Screen Recording permission, and uses on-device Vision OCR within the focused-window bounds. Its targets are marked `visual` in `inspect elements`; they use pointer clicks, never `AXPress`. Kact does not retain captures or recognized text.
+
 See the [configuration implementation](https://github.com/iamgideonidoko/kact/blob/main/src/config.rs) for validation rules.
 
 ## Motion and speed modes

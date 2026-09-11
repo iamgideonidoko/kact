@@ -33,6 +33,7 @@ pub fn labels(count: usize, alphabet: &str) -> Result<Vec<String>> {
 pub struct Navigation {
   pub targets: Vec<Target>,
   pub prefix: String,
+  focused: Option<usize>,
 }
 
 impl Navigation {
@@ -48,11 +49,16 @@ impl Navigation {
     let targets = labels(bounds.len(), alphabet)?
       .into_iter()
       .zip(bounds)
-      .map(|(label, bounds)| Target { label, bounds: *bounds })
+      .map(|(label, bounds)| Target {
+        label,
+        bounds: *bounds,
+        focused: false,
+      })
       .collect();
     Ok(Self {
       targets,
       prefix: String::new(),
+      focused: None,
     })
   }
 
@@ -99,12 +105,58 @@ impl Navigation {
   pub fn clear_prefix(&mut self) {
     self.prefix.clear();
   }
+  pub fn cycle(&mut self, backwards: bool) -> Option<Target> {
+    if self.targets.is_empty() {
+      return None;
+    }
+    let next = match (self.focused, backwards) {
+      (Some(index), false) => (index + 1) % self.targets.len(),
+      (Some(0), true) => self.targets.len() - 1,
+      (Some(index), true) => index - 1,
+      (None, false) => 0,
+      (None, true) => self.targets.len() - 1,
+    };
+    self.focused = Some(next);
+    self.clear_prefix();
+    self.targets.get(next).cloned()
+  }
   pub fn visible(&self) -> Vec<Target> {
     self
       .targets
       .iter()
-      .filter(|target| target.label.starts_with(&self.prefix))
-      .cloned()
+      .enumerate()
+      .filter(|(_, target)| target.label.starts_with(&self.prefix))
+      .map(|(index, target)| Target {
+        focused: self.focused == Some(index),
+        ..target.clone()
+      })
       .collect()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn cycling_wraps_and_marks_only_current_target() {
+    let bounds = [
+      Rect {
+        x: 0.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+      },
+      Rect {
+        x: 1.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+      },
+    ];
+    let mut navigation = Navigation::from_rects(&bounds, "ab").unwrap();
+    assert_eq!(navigation.cycle(false).unwrap().bounds, bounds[0]);
+    assert_eq!(navigation.visible().iter().filter(|target| target.focused).count(), 1);
+    assert_eq!(navigation.cycle(true).unwrap().bounds, bounds[1]);
   }
 }

@@ -1,17 +1,18 @@
 #![allow(deprecated, unexpected_cfgs)]
 use super::*;
+mod visual;
 use cocoa::appkit::{
   NSApp, NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{NO, YES, id, nil};
 use cocoa::foundation::{NSAutoreleasePool, NSPoint, NSRect, NSSize, NSString};
-use core_foundation::base::{CFRelease, CFRetain, CFTypeRef, TCFType};
+use core_foundation::base::{CFEqual, CFRelease, CFRetain, CFTypeRef, TCFType};
 use core_foundation::string::CFString;
 use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Sel};
 use objc::{class, msg_send, sel, sel_impl};
 use std::{
-  collections::{HashSet, VecDeque},
+  collections::{BTreeMap, HashSet, VecDeque},
   marker::PhantomData,
   rc::Rc,
   sync::Once,
@@ -20,6 +21,7 @@ use std::{
 
 struct OverlayData {
   targets: Vec<Target>,
+  visual_bounds: Vec<Rect>,
   prefix: String,
   appearance: Appearance,
   screen: Rect,
@@ -39,6 +41,8 @@ pub struct Desktop {
   overlays: Vec<Overlay>,
   elements: Vec<Element>,
   manual_accessibility_pids: HashSet<i32>,
+  enhanced_user_interface_pids: HashSet<i32>,
+  visual_fallback: bool,
   last_scan: Option<ScanInfo>,
   _main_thread: PhantomData<Rc<()>>,
 }
@@ -132,11 +136,24 @@ extern "C" fn draw(this: &Object, _: Sel, _: NSRect) {
         let _: () = msg_send![path, setLineWidth: 0.5f64];
         let _: () = msg_send![path, stroke];
       }
+      if target.focused {
+        let c = color(&a.highlight, 0.95);
+        let _: () = msg_send![c, setStroke];
+        let path: id = msg_send![class!(NSBezierPath), bezierPathWithRoundedRect: cell xRadius: 4.0f64 yRadius: 4.0f64];
+        let _: () = msg_send![path, setLineWidth: 3.0f64];
+        let _: () = msg_send![path, stroke];
+      }
       // An empty label hides text while preserving the filtered grid geometry.
       if target.label.is_empty() {
         continue;
       }
-      let text = string(&target.label);
+      let visual = data.visual_bounds.contains(&target.bounds);
+      let displayed_label = if visual {
+        format!("V {}", target.label)
+      } else {
+        target.label.clone()
+      };
+      let text = string(&displayed_label);
       let font: id = msg_send![class!(NSFont), boldSystemFontOfSize: a.font_size];
       let attributes: id = msg_send![class!(NSMutableDictionary), dictionary];
       let _: () = msg_send![attributes, setObject: font forKey: string("NSFont")];
@@ -147,7 +164,8 @@ extern "C" fn draw(this: &Object, _: Sel, _: NSRect) {
       if !data.prefix.is_empty() {
         let prefix_attributes: id =
           msg_send![class!(NSDictionary), dictionaryWithObject: color(&a.highlight, 1.0) forKey: string("NSColor")];
-        let range = cocoa::foundation::NSRange::new(0, data.prefix.encode_utf16().count() as u64);
+        let offset = u64::from(visual) * 2;
+        let range = cocoa::foundation::NSRange::new(offset, data.prefix.encode_utf16().count() as u64);
         let _: () = msg_send![label, addAttributes: prefix_attributes range: range];
       }
       let size: NSSize = msg_send![label, size];
@@ -203,6 +221,8 @@ impl Desktop {
         overlays: Vec::new(),
         elements: Vec::new(),
         manual_accessibility_pids: HashSet::new(),
+        enhanced_user_interface_pids: HashSet::new(),
+        visual_fallback: false,
         last_scan: None,
         _main_thread: PhantomData,
       })
@@ -272,6 +292,16 @@ impl Desktop {
           .filter(|target| intersects(target.bounds, data.screen))
           .cloned()
           .collect();
+        data.visual_bounds = if appearance.visual_targets {
+          self
+            .elements
+            .iter()
+            .filter(|element| matches!(element.source, TargetSource::Visual))
+            .map(|element| element.bounds)
+            .collect()
+        } else {
+          vec![]
+        };
         data.prefix = prefix.to_owned();
         data.appearance = appearance.clone();
         unsafe {
@@ -310,6 +340,16 @@ impl Desktop {
             .filter(|t| intersects(t.bounds, screen))
             .cloned()
             .collect(),
+          visual_bounds: if appearance.visual_targets {
+            self
+              .elements
+              .iter()
+              .filter(|element| matches!(element.source, TargetSource::Visual))
+              .map(|element| element.bounds)
+              .collect()
+          } else {
+            vec![]
+          },
           prefix: prefix.to_owned(),
           appearance: appearance.clone(),
           screen,
@@ -368,6 +408,45 @@ impl Desktop {
     self.refresh_elements(None)
   }
 
+  /// Enables the app's explicit enhanced accessibility tree once for the
+  /// foreground process. This is opt-in because some apps change their UI
+  /// while an assistive client is attached.
+  pub fn set_enhanced_user_interface(&mut self, enabled: bool) -> anyhow::Result<()> {
+    if !enabled {
+      return Ok(());
+    }
+    unsafe {
+      anyhow::ensure!(
+        AXIsProcessTrusted(),
+        "Accessibility access required: System Settings > Privacy & Security > Accessibility"
+      );
+      let system = OwnedCf(AXUIElementCreateSystemWide());
+      AXUIElementSetMessagingTimeout(system.0, 0.05);
+      let app = focused_application(system.0).ok_or_else(|| anyhow::anyhow!("Cannot read focused application"))?;
+      let mut pid = 0i32;
+      anyhow::ensure!(AXUIElementGetPid(app.0, &mut pid) == 0, "Cannot read focused process");
+      if self.enhanced_user_interface_pids.insert(pid) {
+        set_bool_attribute(app.0, "AXEnhancedUserInterface", true);
+      }
+    }
+    Ok(())
+  }
+
+  /// Enables pixel-derived OCR targets only after a skeletal AX scan.
+  pub fn set_visual_fallback(&mut self, enabled: bool) {
+    self.visual_fallback = enabled;
+  }
+
+  /// Filters the cached element snapshot; it never traverses accessibility.
+  pub fn matching_elements(&self, query: &str) -> Vec<Rect> {
+    self
+      .elements
+      .iter()
+      .filter(|target| matches_filter(&target.text, &target.role, query))
+      .map(|target| target.bounds)
+      .collect()
+  }
+
   fn refresh_elements(&mut self, pid: Option<i32>) -> anyhow::Result<Vec<Rect>> {
     let mut scan = discover_elements(pid)?;
     // Chromium/Electron often build their tree only after AX is queried. Ask once
@@ -377,6 +456,24 @@ impl Desktop {
       std::thread::sleep(Duration::from_millis(60));
       scan = discover_elements(Some(scan.pid))?;
     }
+    if scan.skeletal() && self.visual_fallback {
+      let window = scan
+        .info
+        .window_bounds
+        .ok_or_else(|| anyhow::anyhow!("visual fallback requires bounds for focused window"))?;
+      let visual_targets = visual::text_targets(window)?;
+      scan.targets.extend(visual_targets.into_iter().map(|target| Element {
+        node: None,
+        bounds: target.bounds,
+        score: 1,
+        depth: 0,
+        role: "VisualText".into(),
+        actions: vec![],
+        text: vec![],
+        source: TargetSource::Visual,
+      }));
+    }
+    scan.info.manual_accessibility_enabled = self.manual_accessibility_pids.contains(&scan.pid);
     self.last_scan = Some(scan.info);
     self.elements = scan.targets;
     Ok(self.elements.iter().map(|target| target.bounds).collect())
@@ -389,8 +486,9 @@ impl Desktop {
       .elements
       .iter()
       .find(|target| target.bounds == bounds)
-      .is_some_and(|target| unsafe {
-        AXUIElementPerformAction(target.node.0, CFString::new("AXPress").as_concrete_TypeRef()) == 0
+      .and_then(|target| target.node.as_ref())
+      .is_some_and(|node| unsafe {
+        AXUIElementPerformAction(node.0, CFString::new("AXPress").as_concrete_TypeRef()) == 0
       })
   }
 
@@ -403,11 +501,23 @@ impl Desktop {
       "application": self.last_scan.as_ref().map(|scan| &scan.application),
       "window": self.last_scan.as_ref().map(|scan| serde_json::json!({ "role": scan.window_role, "bounds": scan.window_bounds })),
       "node_count": self.last_scan.as_ref().map(|scan| scan.visited),
+      "diagnostics": self.last_scan.as_ref().map(|scan| serde_json::json!({
+        "candidate_count": scan.candidates,
+        "accepted_before_deduplication": scan.accepted,
+        "rejected": scan.rejected,
+        "truncated": scan.truncated,
+        "manual_accessibility_enabled": scan.manual_accessibility_enabled,
+        "web_searches": scan.web_searches,
+        "web_search_results": scan.web_search_results,
+        "text": if show_text { "included" } else { "redacted" },
+      })),
       "targets": self.elements.iter().map(|target| serde_json::json!({
         "role": target.role,
         "actions": target.actions,
         "bounds": target.bounds,
         "score": target.score,
+        "source": target.source.name(),
+        "has_text": !target.text.is_empty(),
         "text": show_text.then_some(&target.text),
       })).collect::<Vec<_>>(),
       "target_count": self.elements.len(),
@@ -451,6 +561,12 @@ unsafe extern "C" {
     attribute: core_foundation::string::CFStringRef,
     index: isize,
     max_values: isize,
+    result: *mut CFTypeRef,
+  ) -> i32;
+  fn AXUIElementCopyParameterizedAttributeValue(
+    element: CFTypeRef,
+    attribute: core_foundation::string::CFStringRef,
+    parameter: CFTypeRef,
     result: *mut CFTypeRef,
   ) -> i32;
   fn AXUIElementCopyActionNames(element: CFTypeRef, names: *mut CFTypeRef) -> i32;
@@ -570,13 +686,28 @@ fn read_rect(element: CFTypeRef) -> Option<Rect> {
 }
 
 struct Element {
-  node: OwnedCf,
+  node: Option<OwnedCf>,
   bounds: Rect,
   score: i32,
   depth: usize,
   role: String,
   actions: Vec<String>,
   text: Vec<String>,
+  source: TargetSource,
+}
+
+#[derive(Clone, Copy)]
+enum TargetSource {
+  Semantic,
+  Visual,
+}
+impl TargetSource {
+  fn name(self) -> &'static str {
+    match self {
+      Self::Semantic => "accessibility",
+      Self::Visual => "visual",
+    }
+  }
 }
 
 struct Discovery {
@@ -613,6 +744,17 @@ struct ScanInfo {
   window_role: String,
   window_bounds: Option<Rect>,
   visited: usize,
+  candidates: usize,
+  accepted: usize,
+  rejected: BTreeMap<&'static str, usize>,
+  truncated: bool,
+  manual_accessibility_enabled: bool,
+  web_searches: usize,
+  web_search_results: usize,
+}
+
+fn record_rejection(reasons: &mut BTreeMap<&'static str, usize>, reason: &'static str) {
+  *reasons.entry(reason).or_default() += 1;
 }
 
 const ACTIONABLE_ACTIONS: &[&str] = &[
@@ -686,6 +828,44 @@ fn children(element: CFTypeRef, attribute_name: &str, limit: usize) -> Vec<Owned
   result
 }
 
+/// Chromium and WebKit web areas can provide already-filtered descendants via
+/// this public parameterized AX attribute. Unsupported apps return an empty
+/// result and retain normal paged child traversal below.
+fn web_search_children(element: CFTypeRef, limit: usize) -> Vec<OwnedCf> {
+  use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex};
+  if limit == 0 {
+    return vec![];
+  }
+  unsafe {
+    let predicate: id = msg_send![class!(NSMutableDictionary), dictionary];
+    let key = string("AXAnyTypeSearchKey");
+    let visible: id = msg_send![class!(NSNumber), numberWithBool: YES];
+    let count: id = msg_send![class!(NSNumber), numberWithInteger: limit as isize];
+    let _: () = msg_send![predicate, setObject: key forKey: string("AXSearchKey")];
+    let _: () = msg_send![predicate, setObject: visible forKey: string("AXVisibleOnly")];
+    let _: () = msg_send![predicate, setObject: count forKey: string("AXResultsLimit")];
+    let attribute = CFString::new("AXUIElementsForSearchPredicate");
+    let mut values = std::ptr::null();
+    if AXUIElementCopyParameterizedAttributeValue(
+      element,
+      attribute.as_concrete_TypeRef(),
+      predicate.cast(),
+      &mut values,
+    ) != 0
+      || values.is_null()
+    {
+      return vec![];
+    }
+    let values = OwnedCf(values);
+    (0..CFArrayGetCount(values.0.cast()))
+      .filter_map(|index| {
+        let child = CFArrayGetValueAtIndex(values.0.cast(), index);
+        (!child.is_null() && CFEqual(child, element) == 0).then(|| OwnedCf(CFRetain(child)))
+      })
+      .collect()
+  }
+}
+
 fn comparable_rect(a: Rect, b: Rect) -> bool {
   let intersection = clipped(a, b).map_or(0.0, |r| r.width * r.height);
   intersection >= (a.width * a.height).min(b.width * b.height) * 0.95
@@ -709,6 +889,24 @@ fn score(role: &str, actions: &[String], named: bool, bounds: Rect) -> i32 {
   action_score + i32::from(named) * 10 + (bounds.width.min(bounds.height).min(40.0) as i32 / 4)
 }
 
+fn matches_filter(text: &[String], role: &str, query: &str) -> bool {
+  let query = normalize(query);
+  !query.is_empty()
+    && text
+      .iter()
+      .map(String::as_str)
+      .chain(std::iter::once(role))
+      .any(|value| normalize(value).contains(&query))
+}
+
+fn normalize(value: &str) -> String {
+  value
+    .split_whitespace()
+    .flat_map(str::chars)
+    .flat_map(char::to_lowercase)
+    .collect()
+}
+
 fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
   unsafe {
     anyhow::ensure!(
@@ -730,6 +928,7 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
       AXUIElementGetPid(app.0, &mut actual_pid) == 0,
       "Cannot read focused process"
     );
+    AXUIElementSetMessagingTimeout(app.0, 0.05);
     let root = attribute(app.0, "AXFocusedWindow").unwrap_or_else(|| OwnedCf(CFRetain(app.0)));
     let root_bounds = read_rect(root.0);
     let application = string_attribute(app.0, "AXTitle").unwrap_or_default();
@@ -738,14 +937,22 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
     let budget = Duration::from_millis(350);
     let mut queue = VecDeque::from([(root, 0usize, root_bounds)]);
     let mut visited = 0usize;
+    let mut candidates = 0usize;
+    let mut accepted = 0usize;
+    let mut rejected = BTreeMap::new();
+    let mut truncated = false;
+    let mut web_searches = 0usize;
+    let mut web_search_results = 0usize;
     let mut targets = Vec::new();
     while let Some((node, depth, mut clip)) = queue.pop_front() {
       if visited >= 4000 || started.elapsed() >= budget {
+        truncated = true;
         break;
       }
       visited += 1;
       let role = string_attribute(node.0, "AXRole").unwrap_or_default();
       if bool_attribute(node.0, "AXHidden") == Some(true) {
+        record_rejection(&mut rejected, "hidden");
         continue;
       }
       if matches!(role.as_str(), "AXScrollArea" | "AXWindow" | "AXSheet")
@@ -753,6 +960,7 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
       {
         clip = clip.and_then(|parent| clipped(bounds, parent)).or(Some(bounds));
         if clip.is_none() {
+          record_rejection(&mut rejected, "outside-viewport");
           continue;
         }
       }
@@ -762,34 +970,55 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         .any(|action| ACTIONABLE_ACTIONS.contains(&action.as_str()))
         || CONTROL_ROLES.contains(&role.as_str())
         || matches!(role.as_str(), "AXTextField" | "AXTextArea");
-      if actionable
-        && bool_attribute(node.0, "AXEnabled") != Some(false)
-        && let Some(bounds) = read_rect(node.0)
-        && let Some(bounds) = clip.map_or(Some(bounds), |visible| clipped(bounds, visible))
-      {
-        let text = ["AXTitle", "AXDescription", "AXValue", "AXHelp"]
-          .into_iter()
-          .filter_map(|name| string_attribute(node.0, name))
-          .filter(|value| !value.trim().is_empty())
-          .collect::<Vec<_>>();
-        let score = score(&role, &actions, !text.is_empty(), bounds);
-        if score > 0 {
-          targets.push(Element {
-            node: OwnedCf(CFRetain(node.0)),
-            bounds,
-            score,
-            depth,
-            role: role.clone(),
-            actions,
-            text,
-          });
+      if actionable {
+        candidates += 1;
+      }
+      if !actionable {
+        record_rejection(&mut rejected, "not-actionable");
+      } else if bool_attribute(node.0, "AXEnabled") == Some(false) {
+        record_rejection(&mut rejected, "disabled");
+      } else if let Some(bounds) = read_rect(node.0) {
+        if let Some(bounds) = clip.map_or(Some(bounds), |visible| clipped(bounds, visible)) {
+          let text = ["AXTitle", "AXDescription", "AXValue", "AXHelp"]
+            .into_iter()
+            .filter_map(|name| string_attribute(node.0, name))
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>();
+          let score = score(&role, &actions, !text.is_empty(), bounds);
+          if score > 0 {
+            accepted += 1;
+            targets.push(Element {
+              node: Some(OwnedCf(CFRetain(node.0))),
+              bounds,
+              score,
+              depth,
+              role: role.clone(),
+              actions,
+              text,
+              source: TargetSource::Semantic,
+            });
+          } else {
+            record_rejection(&mut rejected, "score-zero");
+          }
+        } else {
+          record_rejection(&mut rejected, "outside-viewport");
         }
+      } else {
+        record_rejection(&mut rejected, "missing-bounds");
       }
       if depth >= 32 || started.elapsed() >= budget {
+        if !queue.is_empty() {
+          truncated = true;
+        }
         continue;
       }
       let remaining = 4000usize.saturating_sub(visited + queue.len());
-      let mut descendants = if matches!(role.as_str(), "AXTable" | "AXOutline") {
+      let mut descendants = if role == "AXWebArea" {
+        web_searches += 1;
+        let matches = web_search_children(node.0, remaining.min(512));
+        web_search_results += matches.len();
+        matches
+      } else if matches!(role.as_str(), "AXTable" | "AXOutline") {
         children(node.0, "AXVisibleRows", remaining)
       } else {
         vec![]
@@ -812,6 +1041,8 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         .any(|existing| comparable_rect(existing.bounds, target.bounds))
       {
         deduplicated.push(target);
+      } else {
+        record_rejection(&mut rejected, "duplicate-bounds");
       }
     }
     deduplicated.sort_by_key(|target| -target.score);
@@ -824,6 +1055,13 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         window_role,
         window_bounds: root_bounds,
         visited,
+        candidates,
+        accepted,
+        rejected,
+        truncated,
+        manual_accessibility_enabled: false,
+        web_searches,
+        web_search_results,
       },
     })
   }
@@ -937,6 +1175,12 @@ mod tests {
       }
     ));
     assert!(score("AXButton", &[], false, bounds) > score("AXGroup", &[], false, bounds));
+  }
+  #[test]
+  fn semantic_filter_normalizes_case_and_whitespace_and_includes_role() {
+    assert!(matches_filter(&["  Play   Song ".into()], "AXButton", "play song"));
+    assert!(matches_filter(&[], "AXCheckBox", "checkbox"));
+    assert!(!matches_filter(&["Pause".into()], "AXButton", "play"));
   }
   #[test]
   fn titlebar_only_detects_a_skeletal_app_tree() {

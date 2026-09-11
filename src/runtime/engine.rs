@@ -40,6 +40,7 @@ pub struct Runtime {
   screen_layout: Vec<Rect>,
   focus_token: Option<String>,
   refresh_at: Option<Instant>,
+  element_filter: Option<String>,
   cycle: usize,
   labels_visible: bool,
   pub quitting: bool,
@@ -83,6 +84,7 @@ impl Runtime {
       screen_layout: vec![],
       focus_token: None,
       refresh_at: None,
+      element_filter: None,
       cycle: 0,
       labels_visible: true,
       quitting: false,
@@ -168,6 +170,12 @@ impl Runtime {
         &alphabet,
       )?),
       NavigationMode::Elements => {
+        let enhanced_user_interface = self.config.navigation.enhanced_user_interface();
+        let visual_fallback = self.config.navigation.visual_fallback();
+        self
+          .desktop_mut()?
+          .set_enhanced_user_interface(enhanced_user_interface)?;
+        self.desktop_mut()?.set_visual_fallback(visual_fallback);
         let rectangles = self.desktop_mut()?.elements().unwrap_or_else(|error| {
           tracing::warn!(%error, "Element discovery unavailable; using grid");
           vec![]
@@ -216,6 +224,7 @@ impl Runtime {
       None
     };
     self.refresh_at = None;
+    self.element_filter = None;
     self.selected = None;
     self.state.active = true;
     self.labels_active.store(self.navigation.is_some(), Ordering::Release);
@@ -240,6 +249,7 @@ impl Runtime {
           opacity: a.opacity,
           grid_lines: a.grid_lines,
           label_position: a.label_position,
+          visual_targets: self.mode == Some(NavigationMode::Elements),
         };
         let mut targets = navigation.visible();
         if !self.labels_visible {
@@ -445,8 +455,11 @@ impl Runtime {
         if self.mode != Some(NavigationMode::Elements) {
           bail!("refresh requires element navigation");
         }
-        self.activate(NavigationMode::Elements)?;
+        self.refresh_elements()?;
       }
+      Command::Filter { query } => self.filter_elements(&query)?,
+      Command::Next => self.cycle_element(false)?,
+      Command::Previous => self.cycle_element(true)?,
       Command::Show { setting } => {
         match setting {
           Presentation::GridLines => self.appearance.grid_lines = !self.appearance.grid_lines,
@@ -512,6 +525,11 @@ impl Runtime {
     if let Some(rect) = selected {
       if self.mode == Some(NavigationMode::Elements) {
         let current = self.desktop_mut()?.elements()?;
+        let current = if let Some(query) = self.element_filter.as_deref() {
+          self.desktop()?.matching_elements(query)
+        } else {
+          current
+        };
         if !current.contains(&rect) {
           self.navigation = Some(Navigation::from_rects(
             &current,
@@ -540,6 +558,54 @@ impl Runtime {
       }
     } else {
       self.render()?;
+    }
+    Ok(())
+  }
+
+  fn filter_elements(&mut self, query: &str) -> Result<()> {
+    if self.mode != Some(NavigationMode::Elements) {
+      bail!("filter requires element navigation");
+    }
+    let query = query.trim();
+    if query.is_empty() || query.len() > 256 {
+      bail!("filter must contain 1–256 characters");
+    }
+    let targets = self.desktop()?.matching_elements(query);
+    if targets.is_empty() {
+      bail!("no element targets match `{query}`");
+    }
+    self.navigation = Some(Navigation::from_rects(
+      &targets,
+      &self.bindings.alphabet_for(&self.navigation_config.alphabet)?,
+    )?);
+    self.element_filter = Some(query.to_owned());
+    self.selected = None;
+    self.render()
+  }
+
+  fn cycle_element(&mut self, backwards: bool) -> Result<()> {
+    if self.mode != Some(NavigationMode::Elements) {
+      bail!("target cycling requires element navigation");
+    }
+    let target = self
+      .navigation
+      .as_mut()
+      .context("no active target navigation")?
+      .cycle(backwards)
+      .context("no element targets available")?;
+    self.cursor.move_absolute(Vector2D::new(
+      target.bounds.x + target.bounds.width / 2.0,
+      target.bounds.y + target.bounds.height / 2.0,
+    ))?;
+    self.selected = Some(target.bounds);
+    self.render()
+  }
+
+  fn refresh_elements(&mut self) -> Result<()> {
+    let filter = self.element_filter.clone();
+    self.activate(NavigationMode::Elements)?;
+    if let Some(filter) = filter {
+      self.filter_elements(&filter)?;
     }
     Ok(())
   }
@@ -680,7 +746,7 @@ impl Runtime {
     }
     let now = Instant::now();
     if self.refresh_at.is_some_and(|deadline| now >= deadline) {
-      self.activate(NavigationMode::Elements)?;
+      self.refresh_elements()?;
     }
     let frame = Duration::from_secs_f64(1.0 / self.config.motion.target_fps as f64);
     if now.duration_since(self.last_tick) >= frame {
@@ -841,6 +907,7 @@ mod tests {
       screen_layout: vec![],
       focus_token: None,
       refresh_at: None,
+      element_filter: None,
       cycle: 0,
       labels_visible: true,
       quitting: false,

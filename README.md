@@ -96,6 +96,8 @@ kact quit
 
 Clicking exits navigation. Clicking a held button drops it without an extra click. Deactivation, shutdown, and fatal input failures release held buttons. `stop` leaves an existing navigation overlay active; `deactivate` also hides it.
 
+Element mode uses macOS Accessibility data. If an app exposes no usable controls (common with canvas, video, game, and some custom Electron interfaces), it intentionally falls back to grid. Diagnose another app without focusing terminal with `kact inspect elements --pid "$(pgrep -x 'App Name')"`; text stays redacted unless `--show-text` is supplied. Run `kact refresh` after scrolling or changing UI.
+
 Actions sent to the running daemon return JSON and a nonzero exit status on failure. Setup and configuration commands print human-readable results. Continuous movement commands do not activate keyboard capture. Send press/release commands in order; the Hammerspoon example serializes them. `--glide` animates a one-shot move to a target captured at command receipt; a new pointer action, `move-start`, `stop`, deactivation, reload, or quit cancels it. `scroll` uses pixels on macOS and wheel steps on X11. Coordinates use screen points on macOS, with `(0, 0)` at the primary display's top-left; other displays may have negative coordinates.
 
 All commands accept `--config PATH` and `--socket PATH`; these identify the daemon's configuration at startup and its private socket respectively. Use the same `--socket` for clients of a custom instance. `--config` on a client does not switch a running daemon's config. Socket parent directories must be owned by you with mode `0700`.
@@ -160,6 +162,10 @@ navigation_enabled = false
 ```
 
 Movement settings control speed, acceleration, friction, frame rate, and normal/precise/fast multipliers. `motion.curve_type` controls acceleration toward target speed: `linear`, `sigmoid` (the default), or `exponential`. Releasing movement always uses exponential friction. `[glide]` controls opt-in one-shot animation separately, with a duration and easing curve. Navigation settings control rows, columns, label alphabet, and optional automatic clicking after selection. Optional `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` tables override only their specified fields; all other values inherit from the global navigation or appearance settings. Appearance settings control font size, foreground/background/highlight colors, opacity, grid lines, and label position.
+
+`navigation.elements.enhanced_user_interface = true` is an explicit, disabled-by-default compatibility option for older browser accessibility trees. It can change browser behavior; use only after `kact inspect elements` establishes need.
+
+`navigation.elements.visual_fallback = true` enables a separate, on-device Vision OCR fallback only when an application exposes a skeletal accessibility tree. It requires Screen Recording permission and produces pixel-derived targets, never semantic accessibility targets. Kact keeps no capture or recognized text after activation.
 
 Valid reloads apply atomically and exit navigation to clear held input. Invalid reloads retain the previous configuration. Atomic editor saves are supported. Logging changes reload too, unless overridden by `--log-level`. When automatic reload is disabled, use `kact reload` to apply changes.
 

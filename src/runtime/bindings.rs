@@ -23,6 +23,8 @@ impl Bindings {
         ("cmd+h", "deactivate"),
         ("backspace", "backspace"),
         ("ctrl+r", "refresh"),
+        ("tab", "next"),
+        ("shift+tab", "previous"),
         ("enter", "click"),
         ("equal", "button-down"),
         ("backslash", "click --count 2"),

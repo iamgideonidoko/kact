@@ -153,6 +153,12 @@ pub enum Command {
   Refine,
   /// Rescan focused window accessibility targets
   Refresh,
+  /// Label only accessibility targets matching title, description, value, help text, or role
+  Filter { query: String },
+  /// Focus next accessibility target
+  Next,
+  /// Focus previous accessibility target
+  Previous,
   /// Change overlay presentation for this session
   Show {
     #[arg(value_enum)]
@@ -283,6 +289,9 @@ impl Command {
       Self::Select { label } if label.is_empty() || label.len() > 64 || !label.is_ascii() => {
         return Err("label must contain 1–64 ASCII characters".into());
       }
+      Self::Filter { query } if query.trim().is_empty() || query.len() > 256 => {
+        return Err("filter must contain 1–256 characters".into());
+      }
       _ => {}
     }
     Ok(())
@@ -310,6 +319,7 @@ mod tests {
     assert!(Command::from_binding("move --dx -20").is_ok());
     assert!(Command::from_binding("move-to --x 10 --y 20 --glide").is_ok());
     assert!(Command::from_binding("move-start left --speed fast").is_ok());
+    assert!(Command::from_binding("filter play").is_ok());
     assert!(Command::from_binding("setup").is_err());
     assert!(Command::from_binding("uninstall").is_err());
     assert!(Command::from_binding("daemon").is_err());

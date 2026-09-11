@@ -138,6 +138,10 @@ pub struct NavigationOverride {
   pub columns: Option<usize>,
   pub alphabet: Option<String>,
   pub auto_click: Option<bool>,
+  /// Opt-in browser compatibility mode; can alter application behavior.
+  pub enhanced_user_interface: Option<bool>,
+  /// Opt-in OCR fallback for applications with a skeletal accessibility tree.
+  pub visual_fallback: Option<bool>,
 }
 
 impl NavigationConfig {
@@ -161,6 +165,14 @@ impl NavigationConfig {
 
   pub fn for_elements(&self) -> Self {
     self.resolve(&self.elements)
+  }
+
+  pub fn enhanced_user_interface(&self) -> bool {
+    self.elements.enhanced_user_interface.unwrap_or(false)
+  }
+
+  pub fn visual_fallback(&self) -> bool {
+    self.elements.visual_fallback.unwrap_or(false)
   }
 
   pub fn alphabets(&self) -> Vec<String> {
@@ -384,6 +396,8 @@ mod tests {
       columns = 8
       [navigation.elements]
       auto_click = true
+      enhanced_user_interface = true
+      visual_fallback = true
 
       [appearance]
       background = "#112233"
@@ -399,6 +413,8 @@ mod tests {
     let grid = config.navigation.for_grid();
     assert_eq!((grid.rows, grid.columns, grid.alphabet.as_str()), (10, 8, "abcd"));
     assert!(config.navigation.for_elements().auto_click);
+    assert!(config.navigation.enhanced_user_interface());
+    assert!(config.navigation.visual_fallback());
     assert!(!config.appearance.for_grid().grid_lines);
     assert_eq!(config.appearance.for_elements().opacity, 0.5);
     assert_eq!(
