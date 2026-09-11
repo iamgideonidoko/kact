@@ -82,6 +82,13 @@ impl Desktop {
     anyhow::bail!("Accessibility targeting currently requires macOS")
   }
   pub fn set_visual_fallback(&mut self, _: bool) {}
+  pub fn observe_element_changes(&mut self) -> anyhow::Result<()> {
+    Ok(())
+  }
+  pub fn take_element_refresh_requested(&mut self) -> bool {
+    false
+  }
+  pub fn stop_observing_element_changes(&mut self) {}
   pub fn matching_elements(&self, _: &str) -> Vec<Rect> {
     vec![]
   }

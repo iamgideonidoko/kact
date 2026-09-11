@@ -15,7 +15,10 @@ use std::{
   collections::{BTreeMap, HashSet, VecDeque},
   marker::PhantomData,
   rc::Rc,
-  sync::Once,
+  sync::{
+    Once,
+    atomic::{AtomicU64, Ordering},
+  },
   time::{Duration, Instant},
 };
 
@@ -44,7 +47,49 @@ pub struct Desktop {
   enhanced_user_interface_pids: HashSet<i32>,
   visual_fallback: bool,
   last_scan: Option<ScanInfo>,
+  element_observer: Option<ElementObserver>,
+  element_dirty: Box<ElementDirty>,
+  observed_generation: u64,
   _main_thread: PhantomData<Rc<()>>,
+}
+
+/// Shared with the AX callback. A generation, rather than a queue of AX
+/// events, coalesces notification storms without retaining app UI objects.
+struct ElementDirty(AtomicU64);
+
+impl ElementDirty {
+  fn generation(&self) -> u64 {
+    self.0.load(Ordering::Acquire)
+  }
+
+  fn mark(&self) {
+    self.0.fetch_add(1, Ordering::Release);
+  }
+}
+
+struct ElementObserver {
+  _observer: OwnedCf,
+  source: CFTypeRef,
+  run_loop: CFTypeRef,
+  pid: i32,
+  window_hash: usize,
+}
+
+impl Drop for ElementObserver {
+  fn drop(&mut self) {
+    unsafe { CFRunLoopRemoveSource(self.run_loop, self.source, kCFRunLoopCommonModes) }
+  }
+}
+
+extern "C" fn accessibility_changed(
+  _: CFTypeRef,
+  _: CFTypeRef,
+  _: core_foundation::string::CFStringRef,
+  context: *mut std::ffi::c_void,
+) {
+  if let Some(dirty) = unsafe { context.cast::<ElementDirty>().as_ref() } {
+    dirty.mark();
+  }
 }
 
 unsafe fn string(s: &str) -> id {
@@ -224,6 +269,9 @@ impl Desktop {
         enhanced_user_interface_pids: HashSet::new(),
         visual_fallback: false,
         last_scan: None,
+        element_observer: None,
+        element_dirty: Box::new(ElementDirty(AtomicU64::new(0))),
+        observed_generation: 0,
         _main_thread: PhantomData,
       })
     }
@@ -391,6 +439,51 @@ impl Desktop {
       pool.drain();
     }
   }
+
+  /// Begins observing current focused app/window. Notifications are advisory:
+  /// apps may reject names, so runtime must retain bounded polling fallback.
+  pub fn observe_element_changes(&mut self) -> anyhow::Result<()> {
+    unsafe {
+      let system = OwnedCf(AXUIElementCreateSystemWide());
+      AXUIElementSetMessagingTimeout(system.0, 0.05);
+      let Some(app) = focused_application(system.0) else {
+        self.element_observer = None;
+        return Ok(());
+      };
+      let mut pid = 0i32;
+      if AXUIElementGetPid(app.0, &mut pid) != 0 {
+        self.element_observer = None;
+        return Ok(());
+      }
+      let window = attribute(app.0, "AXFocusedWindow").unwrap_or_else(|| OwnedCf(CFRetain(app.0)));
+      let window_hash = core_foundation::base::CFHash(window.0);
+      if self
+        .element_observer
+        .as_ref()
+        .is_some_and(|observer| observer.pid == pid && observer.window_hash == window_hash)
+      {
+        return Ok(());
+      }
+      self.element_observer = create_element_observer(pid, app.0, window.0, self.element_dirty.as_ref());
+      self.observed_generation = self.element_dirty.generation();
+    }
+    Ok(())
+  }
+
+  /// Returns one coalesced dirty signal since prior call. Callback retains no
+  /// AX object, keeping notification handling constant-time and bounded.
+  pub fn take_element_refresh_requested(&mut self) -> bool {
+    let generation = self.element_dirty.generation();
+    let changed = generation != self.observed_generation;
+    self.observed_generation = generation;
+    changed
+  }
+
+  pub fn stop_observing_element_changes(&mut self) {
+    self.element_observer = None;
+    self.observed_generation = self.element_dirty.generation();
+  }
+
   /// Identifies the foreground process, focused window, and its current geometry.
   pub fn focus_token(&self) -> anyhow::Result<String> {
     unsafe {
@@ -550,6 +643,18 @@ fn intersects(a: Rect, b: Rect) -> bool {
 unsafe extern "C" {
   fn AXUIElementCreateSystemWide() -> CFTypeRef;
   fn AXUIElementCreateApplication(pid: i32) -> CFTypeRef;
+  fn AXObserverCreate(
+    pid: i32,
+    callback: extern "C" fn(CFTypeRef, CFTypeRef, core_foundation::string::CFStringRef, *mut std::ffi::c_void),
+    out_observer: *mut CFTypeRef,
+  ) -> i32;
+  fn AXObserverAddNotification(
+    observer: CFTypeRef,
+    element: CFTypeRef,
+    notification: core_foundation::string::CFStringRef,
+    context: *mut std::ffi::c_void,
+  ) -> i32;
+  fn AXObserverGetRunLoopSource(observer: CFTypeRef) -> CFTypeRef;
   fn AXUIElementGetPid(element: CFTypeRef, pid: *mut i32) -> i32;
   fn AXUIElementCopyAttributeValue(
     element: CFTypeRef,
@@ -580,6 +685,61 @@ unsafe extern "C" {
   fn AXValueGetValue(value: CFTypeRef, kind: u32, out: *mut std::ffi::c_void) -> bool;
   fn AXValueGetTypeID() -> usize;
   fn AXIsProcessTrusted() -> bool;
+  fn CFRunLoopGetCurrent() -> CFTypeRef;
+  fn CFRunLoopAddSource(run_loop: CFTypeRef, source: CFTypeRef, mode: CFTypeRef);
+  fn CFRunLoopRemoveSource(run_loop: CFTypeRef, source: CFTypeRef, mode: CFTypeRef);
+  static kCFRunLoopCommonModes: CFTypeRef;
+}
+
+unsafe fn create_element_observer(
+  pid: i32,
+  app: CFTypeRef,
+  window: CFTypeRef,
+  dirty: &ElementDirty,
+) -> Option<ElementObserver> {
+  let mut observer = std::ptr::null();
+  if unsafe { AXObserverCreate(pid, accessibility_changed, &mut observer) } != 0 || observer.is_null() {
+    return None;
+  }
+  let observer = OwnedCf(observer);
+  let context = (dirty as *const ElementDirty).cast_mut().cast();
+  let mut registered = false;
+  for name in [
+    "AXFocusedWindowChanged",
+    "AXFocusedUIElementChanged",
+    "AXMainWindowChanged",
+  ] {
+    registered |=
+      unsafe { AXObserverAddNotification(observer.0, app, CFString::new(name).as_concrete_TypeRef(), context) == 0 };
+  }
+  for name in [
+    "AXMoved",
+    "AXResized",
+    "AXValueChanged",
+    "AXSelectedChildrenChanged",
+    "AXSelectedRowsChanged",
+    "AXLayoutChanged",
+    "AXUIElementDestroyed",
+  ] {
+    registered |=
+      unsafe { AXObserverAddNotification(observer.0, window, CFString::new(name).as_concrete_TypeRef(), context) == 0 };
+  }
+  if !registered {
+    return None;
+  }
+  let source = unsafe { AXObserverGetRunLoopSource(observer.0) };
+  if source.is_null() {
+    return None;
+  }
+  let run_loop = unsafe { CFRunLoopGetCurrent() };
+  unsafe { CFRunLoopAddSource(run_loop, source, kCFRunLoopCommonModes) };
+  Some(ElementObserver {
+    _observer: observer,
+    source,
+    run_loop,
+    pid,
+    window_hash: unsafe { core_foundation::base::CFHash(window) },
+  })
 }
 struct OwnedCf(CFTypeRef);
 impl Drop for OwnedCf {
@@ -1070,6 +1230,16 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn dirty_generation_coalesces_notification_storms() {
+    let dirty = ElementDirty(AtomicU64::new(0));
+    assert_eq!(dirty.generation(), 0);
+    dirty.mark();
+    dirty.mark();
+    assert_eq!(dirty.generation(), 2);
+  }
+
   #[test]
   fn hidden_labels_keep_filtered_geometry_and_scrolled_targets_are_clipped() {
     assert!(label_matches("", "a"));
