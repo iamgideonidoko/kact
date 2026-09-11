@@ -12,6 +12,7 @@ All notable user-facing changes are recorded here.
 - Optional `navigation.elements.enhanced_user_interface` enables legacy browser accessibility compatibility; it remains disabled by default.
 - Optional `navigation.elements.visual_fallback` uses on-device OCR for skeletal accessibility trees after Screen Recording permission is granted.
 - Active element overlays now coalesce macOS structural changes, keep labels stable across unchanged scans, and use only two bounded settling probes after a refresh.
+- Visual fallback requests Screen Recording access when needed and reports unavailable capture access instead of silently showing grid navigation.
 - `kact update` and `kact update --check` for verified updates of release-script installations.
 - Dependabot and CodeQL automation, pinned GitHub Actions, and repository security and contributor policies.
 

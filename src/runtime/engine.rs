@@ -187,10 +187,16 @@ impl Runtime {
           .desktop_mut()?
           .set_enhanced_user_interface(enhanced_user_interface)?;
         self.desktop_mut()?.set_visual_fallback(visual_fallback);
-        let rectangles = self.desktop_mut()?.elements().unwrap_or_else(|error| {
-          tracing::warn!(%error, "Element discovery unavailable; using grid");
-          vec![]
-        });
+        let rectangles = match self.desktop_mut()?.elements() {
+          Ok(rectangles) => rectangles,
+          // Visual fallback is explicitly requested. Permission/OCR failures
+          // must be actionable, never disguised as a grid fallback.
+          Err(error) if visual_fallback => return Err(error),
+          Err(error) => {
+            tracing::warn!(%error, "Element discovery unavailable; using grid");
+            vec![]
+          }
+        };
         if rectangles.is_empty() {
           actual_mode = NavigationMode::Grid;
           tracing::info!("No accessible targets; using grid navigation");

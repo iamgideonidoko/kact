@@ -15,6 +15,7 @@ pub(super) struct VisualTarget {
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
   fn CGPreflightScreenCaptureAccess() -> bool;
+  fn CGRequestScreenCaptureAccess() -> bool;
   fn CGWindowListCreateImage(bounds: CGRect, options: u32, window_id: u32, image_options: u32) -> *mut c_void;
   fn CGImageGetWidth(image: *mut c_void) -> usize;
   fn CGImageGetHeight(image: *mut c_void) -> usize;
@@ -55,7 +56,7 @@ pub(super) fn text_targets(window: Rect) -> Result<Vec<VisualTarget>> {
   );
   unsafe {
     ensure!(
-      CGPreflightScreenCaptureAccess(),
+      CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess(),
       "visual fallback requires Screen Recording permission for Kact in System Settings > Privacy & Security > Screen Recording"
     );
     let pool = NSAutoreleasePool::new(nil);

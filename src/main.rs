@@ -57,6 +57,10 @@ fn main() -> Result<()> {
         #[cfg(target_os = "macos")]
         {
           let mut desktop = kact::desktop::Desktop::new()?;
+          // Diagnostics must use the same visual-fallback setting as element
+          // activation; otherwise skeletal Electron apps cannot be inspected
+          // without stealing focus or reproducing the session manually.
+          desktop.set_visual_fallback(kact::config::Config::load(&config_path)?.navigation.visual_fallback());
           println!(
             "{}",
             serde_json::to_string_pretty(&desktop.inspect_elements(show_text, pid)?)?

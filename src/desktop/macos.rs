@@ -557,7 +557,7 @@ impl Desktop {
         .info
         .window_bounds
         .ok_or_else(|| anyhow::anyhow!("visual fallback requires bounds for focused window"))?;
-      let visual_targets = visual::text_targets(window)?;
+      let visual_targets = visual_targets_after_warmup(window)?;
       scan.targets.extend(visual_targets.into_iter().map(|target| Element {
         node: None,
         bounds: target.bounds,
@@ -625,6 +625,30 @@ impl Desktop {
       "target_count": self.elements.len(),
     }))
   }
+}
+
+/// Electron windows can report an accessible focused window before their first
+/// composited frame is available to CoreGraphics. Retry empty OCR results for a
+/// short, bounded warm-up instead of making users activate elements twice.
+fn visual_targets_after_warmup(window: Rect) -> anyhow::Result<Vec<visual::VisualTarget>> {
+  let mut transient_error = None;
+  for attempt in 0..4 {
+    match visual::text_targets(window) {
+      Ok(targets) if !targets.is_empty() || attempt == 3 => return Ok(targets),
+      Ok(_) => {}
+      Err(error)
+        if error.to_string().contains("could not capture focused window")
+          || error.to_string().contains("no pixels") =>
+      {
+        transient_error = Some(error);
+      }
+      Err(error) => return Err(error),
+    }
+    if attempt != 3 {
+      std::thread::sleep(Duration::from_millis(150));
+    }
+  }
+  Err(transient_error.unwrap_or_else(|| anyhow::anyhow!("visual fallback found no visible text")))
 }
 impl Drop for Desktop {
   fn drop(&mut self) {
