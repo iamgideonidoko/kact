@@ -32,6 +32,8 @@ The daemon loads its configuration once at startup and watches it when `system.h
 
 The runtime uses the same command path for CLI requests and configured bindings. `src/core/` computes movement and label navigation without platform APIs. `src/platform/` injects pointer events and, on macOS, receives keyboard events. `src/desktop/` owns AppKit overlays and accessibility-element discovery on the macOS main thread.
 
+Element labels come from macOS Accessibility, not screen pixels. Kact does not currently use ScreenCaptureKit, OCR, or Screen Recording permission. When an app has no usable Accessibility tree, element mode falls back to grid. This boundary is deliberate: any future visual fallback must be opt-in and visibly distinguish pixel-derived targets from semantic Accessibility targets.
+
 The socket is local, bounded, and owned by the user. Its parent directory must be mode `0700`.
 
 The command socket is not a network API. Use the same `--socket PATH` for a custom daemon and every client that controls it. Passing `--config PATH` to an action command does not change the configuration of a daemon that is already running.
