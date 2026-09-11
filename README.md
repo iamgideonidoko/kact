@@ -52,7 +52,11 @@ Linux X11 builds need `libx11-dev` and `libxtst-dev`. Set `keybindings.navigatio
 
 ```sh
 kact activate grid         # labeled cells on every screen
-kact activate elements     # targets in the focused window; grid fallback
+kact activate elements     # actionable, visible targets in focused window; grid fallback
+kact refresh               # rescan active element navigation
+kact inspect elements      # focused app diagnostics; accessible text redacted
+kact inspect elements --pid 12345 # inspect background app without focusing it
+kact inspect elements --show-text # include accessible text (may be sensitive)
 kact activate freestyle    # movement controls without an overlay
 kact toggle grid
 kact deactivate
@@ -114,6 +118,7 @@ Normal typing is untouched while navigation is inactive. Explicit activation ena
 | Shift+arrows              | Scroll                                    |
 | Modifier+Enter            | Click with those modifiers                |
 | Ctrl+= / Ctrl+Shift+=     | Toggle grid lines / labels                |
+| Ctrl+R                    | Rescan targets in element mode             |
 | Cmd+Shift+= / Cmd+Shift+- | Increase / decrease cell size             |
 | Cmd+= / Cmd+-             | Increase / decrease contrast              |
 
@@ -194,7 +199,7 @@ Automated tests cover config validation, movement timing, labels, state transiti
 - Add `kact config init` presets and generate starter integrations for supported remappers and shells.
 - Add window-relative moves and glides for focused-window centers, edges, corners, and fractional positions.
 - Add held scrolling with the same normal, precise, and fast speed modes as held pointer movement.
-- Improve element targeting with role filters, minimum target sizes, deduplication, app-specific exclusions, and optional accessible names.
+- Add semantic filtering and target cycling for dense element overlays.
 - Extend `kact status` and `kact doctor` with permissions, enabled bindings, display details, and supported capabilities.
 - Improve Linux support through explicit, testable capabilities rather than a blanket platform claim.
   - Harden X11 behavior across desktop environments and window managers; report the active session, display, XTest, and available capabilities through `kact doctor`.

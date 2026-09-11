@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser};
-use kact::command::{Cli, Command, ConfigCommand};
+use kact::command::{Cli, Command, ConfigCommand, InspectCommand};
 use kact::config::Config;
 use kact::ipc::{self, Reply, Server};
 use kact::runtime::{ConfigWatcher, Runtime, bindings::Bindings};
@@ -52,6 +52,20 @@ fn main() -> Result<()> {
         bail!("Enable Accessibility for Kact in System Settings > Privacy & Security");
       }
     }
+    Command::Inspect { command } => match command {
+      InspectCommand::Elements { show_text, pid } => {
+        #[cfg(target_os = "macos")]
+        {
+          let mut desktop = kact::desktop::Desktop::new()?;
+          println!(
+            "{}",
+            serde_json::to_string_pretty(&desktop.inspect_elements(show_text, pid)?)?
+          );
+        }
+        #[cfg(not(target_os = "macos"))]
+        bail!("element inspection currently requires macOS");
+      }
+    },
     Command::Service { command } => kact::service::configure(command, &absolute(&config_path)?, &absolute(&socket)?)?,
     Command::Setup => setup(&cli, &config_path, &socket)?,
     Command::Uninstall { purge } => uninstall(&config_path, &socket, purge)?,

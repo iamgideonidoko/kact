@@ -22,6 +22,7 @@ impl Bindings {
         ("ctrl+g", "cancel"),
         ("cmd+h", "deactivate"),
         ("backspace", "backspace"),
+        ("ctrl+r", "refresh"),
         ("enter", "click"),
         ("equal", "button-down"),
         ("backslash", "click --count 2"),

@@ -37,6 +37,9 @@ unsafe fn overlay_data(view: id) -> *mut OverlayData {
 pub struct Desktop {
   app: id,
   overlays: Vec<Overlay>,
+  elements: Vec<Element>,
+  manual_accessibility_pids: HashSet<i32>,
+  last_scan: Option<ScanInfo>,
   _main_thread: PhantomData<Rc<()>>,
 }
 
@@ -198,6 +201,9 @@ impl Desktop {
       Ok(Self {
         app,
         overlays: Vec::new(),
+        elements: Vec::new(),
+        manual_accessibility_pids: HashSet::new(),
+        last_scan: None,
         _main_thread: PhantomData,
       })
     }
@@ -350,8 +356,7 @@ impl Desktop {
     unsafe {
       let system = OwnedCf(AXUIElementCreateSystemWide());
       AXUIElementSetMessagingTimeout(system.0, 0.05);
-      let app = attribute(system.0, "AXFocusedApplication")
-        .ok_or_else(|| anyhow::anyhow!("Cannot read focused application"))?;
+      let app = focused_application(system.0).ok_or_else(|| anyhow::anyhow!("Cannot read focused application"))?;
       let mut pid = 0i32;
       anyhow::ensure!(AXUIElementGetPid(app.0, &mut pid) == 0, "Cannot read focused process");
       let window = attribute(app.0, "AXFocusedWindow").unwrap_or(app);
@@ -359,8 +364,54 @@ impl Desktop {
       Ok(format!("{pid}:{hash}:{:?}", read_rect(window.0)))
     }
   }
-  pub fn elements(&self) -> anyhow::Result<Vec<Rect>> {
-    discover_elements()
+  pub fn elements(&mut self) -> anyhow::Result<Vec<Rect>> {
+    self.refresh_elements(None)
+  }
+
+  fn refresh_elements(&mut self, pid: Option<i32>) -> anyhow::Result<Vec<Rect>> {
+    let mut scan = discover_elements(pid)?;
+    // Chromium/Electron often build their tree only after AX is queried. Ask once
+    // per process after an empty scan; never enable screen-reader compatibility.
+    if scan.skeletal() && self.manual_accessibility_pids.insert(scan.pid) {
+      unsafe { set_bool_attribute(scan.app.0, "AXManualAccessibility", true) };
+      std::thread::sleep(Duration::from_millis(60));
+      scan = discover_elements(Some(scan.pid))?;
+    }
+    self.last_scan = Some(scan.info);
+    self.elements = scan.targets;
+    Ok(self.elements.iter().map(|target| target.bounds).collect())
+  }
+
+  /// Performs a semantic activation when the exact displayed target still exists.
+  /// Returns false when pointer injection remains required.
+  pub fn press_element(&self, bounds: Rect) -> bool {
+    self
+      .elements
+      .iter()
+      .find(|target| target.bounds == bounds)
+      .is_some_and(|target| unsafe {
+        AXUIElementPerformAction(target.node.0, CFString::new("AXPress").as_concrete_TypeRef()) == 0
+      })
+  }
+
+  pub fn inspect_elements(&mut self, show_text: bool, pid: Option<i32>) -> anyhow::Result<serde_json::Value> {
+    let started = Instant::now();
+    self.refresh_elements(pid)?;
+    Ok(serde_json::json!({
+      "mode": "accessibility",
+      "duration_ms": started.elapsed().as_millis(),
+      "application": self.last_scan.as_ref().map(|scan| &scan.application),
+      "window": self.last_scan.as_ref().map(|scan| serde_json::json!({ "role": scan.window_role, "bounds": scan.window_bounds })),
+      "node_count": self.last_scan.as_ref().map(|scan| scan.visited),
+      "targets": self.elements.iter().map(|target| serde_json::json!({
+        "role": target.role,
+        "actions": target.actions,
+        "bounds": target.bounds,
+        "score": target.score,
+        "text": show_text.then_some(&target.text),
+      })).collect::<Vec<_>>(),
+      "target_count": self.elements.len(),
+    }))
   }
 }
 impl Drop for Desktop {
@@ -388,6 +439,7 @@ fn intersects(a: Rect, b: Rect) -> bool {
 #[link(name = "ApplicationServices", kind = "framework")]
 unsafe extern "C" {
   fn AXUIElementCreateSystemWide() -> CFTypeRef;
+  fn AXUIElementCreateApplication(pid: i32) -> CFTypeRef;
   fn AXUIElementGetPid(element: CFTypeRef, pid: *mut i32) -> i32;
   fn AXUIElementCopyAttributeValue(
     element: CFTypeRef,
@@ -400,6 +452,13 @@ unsafe extern "C" {
     index: isize,
     max_values: isize,
     result: *mut CFTypeRef,
+  ) -> i32;
+  fn AXUIElementCopyActionNames(element: CFTypeRef, names: *mut CFTypeRef) -> i32;
+  fn AXUIElementPerformAction(element: CFTypeRef, action: core_foundation::string::CFStringRef) -> i32;
+  fn AXUIElementSetAttributeValue(
+    element: CFTypeRef,
+    attribute: core_foundation::string::CFStringRef,
+    value: CFTypeRef,
   ) -> i32;
   fn AXUIElementSetMessagingTimeout(element: CFTypeRef, timeout: f32) -> i32;
   fn AXValueGetValue(value: CFTypeRef, kind: u32, out: *mut std::ffi::c_void) -> bool;
@@ -423,6 +482,51 @@ fn attribute(element: CFTypeRef, name: &str) -> Option<OwnedCf> {
     } else {
       None
     }
+  }
+}
+
+/// AXFocusedApplication is unavailable to some detached launchd processes.
+/// NSWorkspace still reports foreground PID in active user session.
+fn focused_application(system: CFTypeRef) -> Option<OwnedCf> {
+  attribute(system, "AXFocusedApplication").or_else(|| unsafe {
+    let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+    let running: id = msg_send![workspace, frontmostApplication];
+    if running == nil {
+      return None;
+    }
+    let pid: i32 = msg_send![running, processIdentifier];
+    let app = AXUIElementCreateApplication(pid);
+    (!app.is_null()).then_some(OwnedCf(app))
+  })
+}
+
+unsafe fn set_bool_attribute(element: CFTypeRef, name: &str, value: bool) -> bool {
+  let name = CFString::new(name);
+  let value = unsafe {
+    if value {
+      core_foundation::boolean::kCFBooleanTrue.cast()
+    } else {
+      core_foundation::boolean::kCFBooleanFalse.cast()
+    }
+  };
+  unsafe { AXUIElementSetAttributeValue(element, name.as_concrete_TypeRef(), value) == 0 }
+}
+
+fn string_attribute(element: CFTypeRef, name: &str) -> Option<String> {
+  use core_foundation::base::CFGetTypeID;
+  let value = attribute(element, name)?;
+  unsafe {
+    (CFGetTypeID(value.0) == core_foundation::string::CFStringGetTypeID())
+      .then(|| CFString::wrap_under_get_rule(value.0.cast()).to_string())
+  }
+}
+
+fn bool_attribute(element: CFTypeRef, name: &str) -> Option<bool> {
+  use core_foundation::base::CFGetTypeID;
+  let value = attribute(element, name)?;
+  unsafe {
+    (CFGetTypeID(value.0) == core_foundation::boolean::CFBooleanGetTypeID())
+      .then(|| value.0 == core_foundation::boolean::kCFBooleanTrue.cast())
   }
 }
 fn read_rect(element: CFTypeRef) -> Option<Rect> {
@@ -465,11 +569,147 @@ fn read_rect(element: CFTypeRef) -> Option<Rect> {
   }
 }
 
-fn discover_elements() -> anyhow::Result<Vec<Rect>> {
-  use core_foundation::{
-    array::{CFArrayGetCount, CFArrayGetValueAtIndex},
-    base::CFGetTypeID,
+struct Element {
+  node: OwnedCf,
+  bounds: Rect,
+  score: i32,
+  depth: usize,
+  role: String,
+  actions: Vec<String>,
+  text: Vec<String>,
+}
+
+struct Discovery {
+  app: OwnedCf,
+  pid: i32,
+  targets: Vec<Element>,
+  info: ScanInfo,
+}
+
+impl Discovery {
+  fn skeletal(&self) -> bool {
+    if self.targets.is_empty() {
+      return true;
+    }
+    let Some(window) = self.info.window_bounds else {
+      return false;
+    };
+    titlebar_only(
+      &self.targets.iter().map(|target| target.bounds).collect::<Vec<_>>(),
+      window,
+    )
+  }
+}
+
+fn titlebar_only(targets: &[Rect], window: Rect) -> bool {
+  targets.len() <= 3
+    && targets
+      .iter()
+      .all(|target| target.height <= 32.0 && target.y < window.y + 64.0)
+}
+
+struct ScanInfo {
+  application: String,
+  window_role: String,
+  window_bounds: Option<Rect>,
+  visited: usize,
+}
+
+const ACTIONABLE_ACTIONS: &[&str] = &[
+  "AXPress",
+  "AXConfirm",
+  "AXShowMenu",
+  "AXIncrement",
+  "AXDecrement",
+  "AXRaise",
+];
+
+// Some apps (notably Electron) publish control roles before they expose their
+// action list. Keep these as a lower-ranked compatibility fallback; generic
+// containers still require an action so presentation nodes do not get labels.
+const CONTROL_ROLES: &[&str] = &[
+  "AXButton",
+  "AXCheckBox",
+  "AXRadioButton",
+  "AXLink",
+  "AXComboBox",
+  "AXPopUpButton",
+  "AXSlider",
+  "AXTab",
+  "AXMenuItem",
+  "AXDisclosureTriangle",
+  "AXCell",
+];
+
+fn actions(element: CFTypeRef) -> Vec<String> {
+  use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex};
+  unsafe {
+    let mut values = std::ptr::null();
+    if AXUIElementCopyActionNames(element, &mut values) != 0 || values.is_null() {
+      return vec![];
+    }
+    let values = OwnedCf(values);
+    (0..CFArrayGetCount(values.0.cast()))
+      .filter_map(|index| {
+        let value = CFArrayGetValueAtIndex(values.0.cast(), index);
+        (!value.is_null()).then(|| CFString::wrap_under_get_rule(value.cast()).to_string())
+      })
+      .collect()
+  }
+}
+
+fn children(element: CFTypeRef, attribute_name: &str, limit: usize) -> Vec<OwnedCf> {
+  use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex};
+  let name = CFString::new(attribute_name);
+  let mut result = Vec::new();
+  unsafe {
+    for offset in (0..limit).step_by(256) {
+      let mut values = std::ptr::null();
+      if AXUIElementCopyAttributeValues(element, name.as_concrete_TypeRef(), offset as isize, 256, &mut values) != 0
+        || values.is_null()
+      {
+        break;
+      }
+      let values = OwnedCf(values);
+      let count = CFArrayGetCount(values.0.cast()) as usize;
+      for index in 0..count {
+        let child = CFArrayGetValueAtIndex(values.0.cast(), index as isize);
+        if !child.is_null() {
+          result.push(OwnedCf(CFRetain(child)));
+        }
+      }
+      if count < 256 {
+        break;
+      }
+    }
+  }
+  result
+}
+
+fn comparable_rect(a: Rect, b: Rect) -> bool {
+  let intersection = clipped(a, b).map_or(0.0, |r| r.width * r.height);
+  intersection >= (a.width * a.height).min(b.width * b.height) * 0.95
+}
+
+fn score(role: &str, actions: &[String], named: bool, bounds: Rect) -> i32 {
+  let action_score = if actions.iter().any(|action| action == "AXPress") {
+    100
+  } else if actions
+    .iter()
+    .any(|action| ACTIONABLE_ACTIONS.contains(&action.as_str()))
+  {
+    80
+  } else if matches!(role, "AXTextField" | "AXTextArea" | "AXComboBox" | "AXSlider") {
+    50
+  } else if CONTROL_ROLES.contains(&role) {
+    40
+  } else {
+    0
   };
+  action_score + i32::from(named) * 10 + (bounds.width.min(bounds.height).min(40.0) as i32 / 4)
+}
+
+fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
   unsafe {
     anyhow::ensure!(
       AXIsProcessTrusted(),
@@ -477,95 +717,115 @@ fn discover_elements() -> anyhow::Result<Vec<Rect>> {
     );
     let system = OwnedCf(AXUIElementCreateSystemWide());
     AXUIElementSetMessagingTimeout(system.0, 0.05);
-    let app =
-      attribute(system.0, "AXFocusedApplication").ok_or_else(|| anyhow::anyhow!("Cannot read focused application"))?;
-    let root = attribute(app.0, "AXFocusedWindow").unwrap_or(app);
+    let app = match pid {
+      Some(pid) => {
+        let app = AXUIElementCreateApplication(pid);
+        anyhow::ensure!(!app.is_null(), "Cannot create accessibility element for process {pid}");
+        OwnedCf(app)
+      }
+      None => focused_application(system.0).ok_or_else(|| anyhow::anyhow!("Cannot read focused application"))?,
+    };
+    let mut actual_pid = 0i32;
+    anyhow::ensure!(
+      AXUIElementGetPid(app.0, &mut actual_pid) == 0,
+      "Cannot read focused process"
+    );
+    let root = attribute(app.0, "AXFocusedWindow").unwrap_or_else(|| OwnedCf(CFRetain(app.0)));
+    let root_bounds = read_rect(root.0);
+    let application = string_attribute(app.0, "AXTitle").unwrap_or_default();
+    let window_role = string_attribute(root.0, "AXRole").unwrap_or_default();
     let started = Instant::now();
     let budget = Duration::from_millis(350);
-    let root_bounds = read_rect(root.0);
     let mut queue = VecDeque::from([(root, 0usize, root_bounds)]);
-    let mut visited = 0;
-    let mut result = Vec::new();
-    let mut seen = HashSet::new();
+    let mut visited = 0usize;
+    let mut targets = Vec::new();
     while let Some((node, depth, mut clip)) = queue.pop_front() {
       if visited >= 4000 || started.elapsed() >= budget {
         break;
       }
       visited += 1;
-      let role = attribute(node.0, "AXRole").and_then(|v| {
-        (CFGetTypeID(v.0) == core_foundation::string::CFStringGetTypeID())
-          .then(|| CFString::wrap_under_get_rule(v.0.cast()).to_string())
-      });
-      let target = matches!(
-        role.as_deref(),
-        Some(
-          "AXButton"
-            | "AXCheckBox"
-            | "AXRadioButton"
-            | "AXLink"
-            | "AXTextField"
-            | "AXTextArea"
-            | "AXComboBox"
-            | "AXPopUpButton"
-            | "AXSlider"
-            | "AXTab"
-            | "AXMenuItem"
-            | "AXDisclosureTriangle"
-            | "AXImage"
-            | "AXCell"
-        )
-      );
-      let hidden = attribute(node.0, "AXHidden").is_some_and(|value| {
-        CFGetTypeID(value.0) == core_foundation::boolean::CFBooleanGetTypeID()
-          && value.0 == core_foundation::boolean::kCFBooleanTrue.cast()
-      });
-      if hidden {
+      let role = string_attribute(node.0, "AXRole").unwrap_or_default();
+      if bool_attribute(node.0, "AXHidden") == Some(true) {
         continue;
       }
-      let disabled = attribute(node.0, "AXEnabled").is_some_and(|value| {
-        CFGetTypeID(value.0) == core_foundation::boolean::CFBooleanGetTypeID()
-          && value.0 == core_foundation::boolean::kCFBooleanFalse.cast()
-      });
-      if matches!(role.as_deref(), Some("AXScrollArea" | "AXWindow" | "AXSheet"))
+      if matches!(role.as_str(), "AXScrollArea" | "AXWindow" | "AXSheet")
         && let Some(bounds) = read_rect(node.0)
       {
-        if let Some(parent) = clip {
-          clip = clipped(bounds, parent);
-          if clip.is_none() {
-            continue;
-          }
-        } else {
-          clip = Some(bounds);
+        clip = clip.and_then(|parent| clipped(bounds, parent)).or(Some(bounds));
+        if clip.is_none() {
+          continue;
         }
       }
-      if target
-        && !disabled
+      let actions = actions(node.0);
+      let actionable = actions
+        .iter()
+        .any(|action| ACTIONABLE_ACTIONS.contains(&action.as_str()))
+        || CONTROL_ROLES.contains(&role.as_str())
+        || matches!(role.as_str(), "AXTextField" | "AXTextArea");
+      if actionable
+        && bool_attribute(node.0, "AXEnabled") != Some(false)
         && let Some(bounds) = read_rect(node.0)
-        && let Some(rect) = clip.map_or(Some(bounds), |clip| clipped(bounds, clip))
-        && seen.insert((rect.x as i64, rect.y as i64, rect.width as i64, rect.height as i64))
+        && let Some(bounds) = clip.map_or(Some(bounds), |visible| clipped(bounds, visible))
       {
-        result.push(rect);
+        let text = ["AXTitle", "AXDescription", "AXValue", "AXHelp"]
+          .into_iter()
+          .filter_map(|name| string_attribute(node.0, name))
+          .filter(|value| !value.trim().is_empty())
+          .collect::<Vec<_>>();
+        let score = score(&role, &actions, !text.is_empty(), bounds);
+        if score > 0 {
+          targets.push(Element {
+            node: OwnedCf(CFRetain(node.0)),
+            bounds,
+            score,
+            depth,
+            role: role.clone(),
+            actions,
+            text,
+          });
+        }
       }
       if depth >= 32 || started.elapsed() >= budget {
         continue;
       }
-      let name = CFString::new("AXChildren");
-      let mut children = std::ptr::null();
-      let remaining = 4000usize.saturating_sub(visited + queue.len()).min(512);
-      if remaining > 0
-        && AXUIElementCopyAttributeValues(node.0, name.as_concrete_TypeRef(), 0, remaining as isize, &mut children) == 0
-        && !children.is_null()
-      {
-        let children = OwnedCf(children);
-        for i in 0..CFArrayGetCount(children.0.cast()) {
-          let child = CFArrayGetValueAtIndex(children.0.cast(), i);
-          if !child.is_null() {
-            queue.push_back((OwnedCf(CFRetain(child)), depth + 1, clip));
-          }
-        }
+      let remaining = 4000usize.saturating_sub(visited + queue.len());
+      let mut descendants = if matches!(role.as_str(), "AXTable" | "AXOutline") {
+        children(node.0, "AXVisibleRows", remaining)
+      } else {
+        vec![]
+      };
+      if descendants.is_empty() && matches!(role.as_str(), "AXScrollArea" | "AXTable" | "AXOutline") {
+        descendants = children(node.0, "AXVisibleChildren", remaining);
+      }
+      if descendants.is_empty() {
+        descendants = children(node.0, "AXChildren", remaining);
+      }
+      for child in descendants {
+        queue.push_back((child, depth + 1, clip));
       }
     }
-    Ok(result)
+    targets.sort_by_key(|target| (-(target.depth as isize), -(target.score as isize)));
+    let mut deduplicated: Vec<Element> = Vec::new();
+    for target in targets {
+      if !deduplicated
+        .iter()
+        .any(|existing| comparable_rect(existing.bounds, target.bounds))
+      {
+        deduplicated.push(target);
+      }
+    }
+    deduplicated.sort_by_key(|target| -target.score);
+    Ok(Discovery {
+      app,
+      pid: actual_pid,
+      targets: deduplicated,
+      info: ScanInfo {
+        application,
+        window_role,
+        window_bounds: root_bounds,
+        visited,
+      },
+    })
   }
 }
 
@@ -647,6 +907,62 @@ mod tests {
         height: 40.0
       },
       screen
+    ));
+  }
+  #[test]
+  fn target_ranking_prefers_press_and_deduplicates_near_identical_controls() {
+    let bounds = Rect {
+      x: 10.0,
+      y: 10.0,
+      width: 40.0,
+      height: 20.0,
+    };
+    assert!(score("AXGroup", &["AXPress".into()], true, bounds) > score("AXButton", &[], true, bounds));
+    assert!(comparable_rect(
+      bounds,
+      Rect {
+        x: 10.5,
+        y: 10.5,
+        width: 39.0,
+        height: 19.0,
+      }
+    ));
+    assert!(!comparable_rect(
+      bounds,
+      Rect {
+        x: 60.0,
+        y: 10.0,
+        width: 40.0,
+        height: 20.0,
+      }
+    ));
+    assert!(score("AXButton", &[], false, bounds) > score("AXGroup", &[], false, bounds));
+  }
+  #[test]
+  fn titlebar_only_detects_a_skeletal_app_tree() {
+    let window = Rect {
+      x: 100.0,
+      y: 200.0,
+      width: 800.0,
+      height: 600.0,
+    };
+    assert!(titlebar_only(
+      &[Rect {
+        x: 110.0,
+        y: 210.0,
+        width: 16.0,
+        height: 16.0,
+      }],
+      window
+    ));
+    assert!(!titlebar_only(
+      &[Rect {
+        x: 110.0,
+        y: 300.0,
+        width: 16.0,
+        height: 16.0,
+      }],
+      window
     ));
   }
   #[test]

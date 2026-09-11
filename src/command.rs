@@ -151,6 +151,8 @@ pub enum Command {
   Backspace,
   /// Subdivide the last selected grid cell
   Refine,
+  /// Rescan focused window accessibility targets
+  Refresh,
   /// Change overlay presentation for this session
   Show {
     #[arg(value_enum)]
@@ -160,6 +162,11 @@ pub enum Command {
   Reload,
   /// Check permissions and configuration without moving the cursor
   Doctor,
+  /// Inspect accessibility targets in the focused macOS window
+  Inspect {
+    #[command(subcommand)]
+    command: InspectCommand,
+  },
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +178,22 @@ pub enum ConfigCommand {
   Check,
   /// Print the resolved configuration path
   Path,
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InspectCommand {
+  /// Report element discovery diagnostics; text is redacted by default
+  Elements {
+    /// Include accessible titles, descriptions, values, and help text
+    #[arg(long)]
+    #[serde(default)]
+    show_text: bool,
+    /// Inspect this macOS process instead of the focused application
+    #[arg(long, value_parser = clap::value_parser!(i32).range(1..))]
+    #[serde(default)]
+    pid: Option<i32>,
+  },
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +253,7 @@ impl Command {
         | Self::Config { .. }
         | Self::Service { .. }
         | Self::Doctor
+        | Self::Inspect { .. }
     ) || cli.config.is_some()
       || cli.socket.is_some()
       || cli.log_level.is_some()

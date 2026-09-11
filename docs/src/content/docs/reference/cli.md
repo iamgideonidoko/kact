@@ -44,6 +44,7 @@ kact quit       # stops the daemon
 | Command | Syntax | Purpose |
 | --- | --- | --- |
 | Activate | `activate [grid\|elements\|freestyle]` | Start a mode; default is `freestyle`. |
+| Refresh | `refresh` | Rescan active element navigation. |
 | Toggle | `toggle [grid\|elements\|freestyle]` | Activate the mode or deactivate an active mode. |
 | Deactivate | `deactivate` | Hide navigation and release held input. |
 | Cancel | `cancel` | Clear a label prefix or deactivate if empty. |
@@ -57,7 +58,9 @@ kact quit       # stops the daemon
 
 Coordinates must be finite and within ±1,000,000. A glide captures its start and target when received, reaches that target exactly, and never queues. A new pointer action, `move-start`, `stop`, deactivation, reload, or quit cancels it. Continuous commands require a running daemon and should be paired in order.
 
-`activate grid` shows labeled cells on every display. `activate elements` labels accessible elements in the focused macOS window and falls back to a grid when no targets are available. `activate freestyle` enables local movement controls without showing an overlay. `toggle MODE` deactivates any active mode, regardless of the requested mode.
+`activate grid` shows labeled cells on every display. `activate elements` labels visible, enabled actionable accessibility targets in the focused macOS window and falls back to a grid when no targets are available. `refresh` rescans an active elements overlay. `activate freestyle` enables local movement controls without showing an overlay. `toggle MODE` deactivates any active mode, regardless of the requested mode.
+
+`inspect elements` reports action-aware element discovery diagnostics without printing accessible text. Use `inspect elements --pid PID` to inspect an application without focusing it first; `--show-text` includes accessible text only when it is safe to expose in terminal history.
 
 ## Pointer and labels
 

@@ -132,6 +132,13 @@ impl Runtime {
       .context("visual navigation currently requires macOS")
   }
 
+  fn desktop_mut(&mut self) -> Result<&mut Desktop> {
+    self
+      .desktop
+      .as_mut()
+      .context("visual navigation currently requires macOS")
+  }
+
   fn activate(&mut self, mode: NavigationMode) -> Result<()> {
     if !platform::accessibility_trusted(true) {
       bail!("Enable Accessibility for Kact in System Settings > Privacy & Security, then retry");
@@ -161,7 +168,7 @@ impl Runtime {
         &alphabet,
       )?),
       NavigationMode::Elements => {
-        let rectangles = self.desktop()?.elements().unwrap_or_else(|error| {
+        let rectangles = self.desktop_mut()?.elements().unwrap_or_else(|error| {
           tracing::warn!(%error, "Element discovery unavailable; using grid");
           vec![]
         });
@@ -434,6 +441,12 @@ impl Runtime {
         self.selected = None;
         self.render()?;
       }
+      Command::Refresh => {
+        if self.mode != Some(NavigationMode::Elements) {
+          bail!("refresh requires element navigation");
+        }
+        self.activate(NavigationMode::Elements)?;
+      }
       Command::Show { setting } => {
         match setting {
           Presentation::GridLines => self.appearance.grid_lines = !self.appearance.grid_lines,
@@ -498,7 +511,7 @@ impl Runtime {
     }
     if let Some(rect) = selected {
       if self.mode == Some(NavigationMode::Elements) {
-        let current = self.desktop()?.elements()?;
+        let current = self.desktop_mut()?.elements()?;
         if !current.contains(&rect) {
           self.navigation = Some(Navigation::from_rects(
             &current,
@@ -515,12 +528,16 @@ impl Runtime {
       self.selected = Some(rect);
     }
     self.navigation = Some(navigation);
-    if selected.is_some() && self.navigation_config.auto_click {
-      self.execute(Command::Click {
-        button: Button::Left,
-        count: 1,
-        modifiers: vec![],
-      })?;
+    if let Some(bounds) = selected.filter(|_| self.navigation_config.auto_click) {
+      if self.mode == Some(NavigationMode::Elements) && self.desktop()?.press_element(bounds) {
+        self.deactivate()?;
+      } else {
+        self.execute(Command::Click {
+          button: Button::Left,
+          count: 1,
+          modifiers: vec![],
+        })?;
+      }
     } else {
       self.render()?;
     }

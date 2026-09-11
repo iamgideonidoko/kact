@@ -17,7 +17,7 @@ pub enum LabelPosition {
   BottomRight,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Rect {
   pub x: f64,
   pub y: f64,
