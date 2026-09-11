@@ -11,6 +11,7 @@ All notable user-facing changes are recorded here.
 - `make smoke-elements` validates anonymous Accessibility structure against a deterministic native control fixture.
 - Optional `navigation.elements.enhanced_user_interface` enables legacy browser accessibility compatibility; it remains disabled by default.
 - Optional `navigation.elements.visual_fallback` uses on-device OCR for skeletal accessibility trees after Screen Recording permission is granted.
+- Active element overlays now coalesce macOS accessibility changes, suppress stale labels during refresh, and use capped polling for apps that omit accessibility notifications.
 - `kact update` and `kact update --check` for verified updates of release-script installations.
 - Dependabot and CodeQL automation, pinned GitHub Actions, and repository security and contributor policies.
 

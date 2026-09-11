@@ -664,8 +664,10 @@ impl Runtime {
       all_targets
     };
     if targets.is_empty() {
-      self.deactivate()?;
-      bail!("no accessible targets remain; activate elements again");
+      // Accessibility trees can be empty for a frame while an application is
+      // rebuilding after a scroll. Keep the current session non-actionable and
+      // retry instead of unexpectedly falling back to grid.
+      bail!("no accessible targets available yet");
     }
     let previous = self
       .navigation

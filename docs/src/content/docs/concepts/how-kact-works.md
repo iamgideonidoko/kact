@@ -32,7 +32,7 @@ The daemon loads its configuration once at startup and watches it when `system.h
 
 The runtime uses the same command path for CLI requests and configured bindings. `src/core/` computes movement and label navigation without platform APIs. `src/platform/` injects pointer events and, on macOS, receives keyboard events. `src/desktop/` owns AppKit overlays and accessibility-element discovery on the macOS main thread.
 
-Element labels come from macOS Accessibility, not screen pixels. Kact does not currently use ScreenCaptureKit, OCR, or Screen Recording permission. When an app has no usable Accessibility tree, element mode falls back to grid. This boundary is deliberate: any future visual fallback must be opt-in and visibly distinguish pixel-derived targets from semantic Accessibility targets.
+Element mode first uses macOS Accessibility. While active, it coalesces accessibility layout notifications, debounces refreshes, and uses a capped fallback rescan for apps that do not emit notifications. This keeps stale labels non-actionable while a view changes. If no usable Accessibility tree exists at activation, it falls back to grid. Optional `navigation.elements.visual_fallback` uses on-device Vision OCR after Screen Recording permission; its pixel-derived targets are visibly distinct and never use semantic accessibility actions.
 
 The socket is local, bounded, and owned by the user. Its parent directory must be mode `0700`.
 

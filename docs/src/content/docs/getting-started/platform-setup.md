@@ -9,9 +9,9 @@ Kact uses Accessibility to inject pointer events and inspect accessible UI eleme
 
 ## Accessibility and visual surfaces
 
-Element navigation reads only macOS Accessibility metadata: roles, actions, bounds, and optional accessible text. It does not capture windows, read pixels, run OCR, or request **Screen Recording** permission. This keeps normal navigation usable without screen-content access and ensures labels represent semantic Accessibility targets.
+Normal element navigation reads only macOS Accessibility metadata: roles, actions, bounds, and optional accessible text. It does not capture windows, read pixels, run OCR, or request **Screen Recording** permission. It refreshes after accessibility layout changes, with a capped fallback rescan for apps that do not send notifications.
 
-Some interfaces intentionally expose no useful Accessibility controls: canvas and game views, video surfaces, and some custom browser or Electron UIs. Kact falls back to grid navigation for those surfaces. A future visual fallback must remain explicit, require Screen Recording permission before capture, and label visual targets separately from Accessibility targets; it must never silently change normal element navigation.
+Some interfaces intentionally expose no useful Accessibility controls: canvas and game views, video surfaces, and some custom browser or Electron UIs. Kact falls back to grid navigation for those surfaces. `navigation.elements.visual_fallback = true` opts into an on-device Vision OCR scan after Screen Recording permission; visual labels are distinct from Accessibility targets and never silently replace semantic targeting.
 
 Native local and optional global keyboard bindings use the macOS event tap. If key capture is denied, grant Input Monitoring to Kact or the terminal that launched it.
 
