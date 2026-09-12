@@ -99,7 +99,7 @@ For an app whose main UI is not exposed through Accessibility, opt into the sepa
 visual_fallback = true
 ```
 
-It runs only after a skeletal Accessibility scan, requests Screen Recording permission when first needed, and uses on-device Vision OCR within the focused-window bounds. Its targets are marked `visual` in `inspect elements`; they use pointer clicks, never `AXPress`. Kact does not retain captures or recognized text. If permission is denied, activation reports that error instead of silently falling back to grid.
+It requests Screen Recording permission when first needed and uses on-device Vision OCR within the focused-window bounds, only after a completed Accessibility scan lacks content controls. A usable Accessibility tree bypasses OCR entirely. Visual text regions covered by an existing target are removed; remaining visual targets use pointer clicks, never `AXPress`, and cannot identify icon-only buttons. Captures and recognized text are not persisted. `inspect elements` remains an Accessibility-only diagnostic and honors the enhanced accessibility setting for the specified PID. If permission is denied and no usable Accessibility tree exists, activation reports that error instead of silently falling back to grid.
 
 See the [configuration implementation](https://github.com/iamgideonidoko/kact/blob/main/src/config.rs) for validation rules.
 

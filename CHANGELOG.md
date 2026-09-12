@@ -10,7 +10,8 @@ All notable user-facing changes are recorded here.
 - `kact inspect elements --pid PID` inspects a target macOS app without changing focus.
 - `make smoke-elements` validates anonymous Accessibility structure against a deterministic native control fixture.
 - Optional `navigation.elements.enhanced_user_interface` enables legacy browser accessibility compatibility; it remains disabled by default.
-- Optional `navigation.elements.visual_fallback` uses on-device OCR for skeletal accessibility trees after Screen Recording permission is granted.
+- Optional `navigation.elements.visual_fallback` uses on-device OCR only when a completed Accessibility scan lacks content controls, avoiding capture overhead on usable native trees.
+- Accessibility enablement retries now depend on successful requests and share a hydration deadline. Distinct nested controls remain labelled, and partial scans cannot reuse targets from a previous window.
 - Active element overlays now coalesce macOS structural changes, keep labels stable across unchanged scans, and use only two bounded settling probes after a refresh.
 - Visual fallback requests Screen Recording access when needed and reports unavailable capture access instead of silently showing grid navigation.
 - `kact update` and `kact update --check` for verified updates of release-script installations.

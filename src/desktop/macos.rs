@@ -505,6 +505,10 @@ impl Desktop {
   /// foreground process. This is opt-in because some apps change their UI
   /// while an assistive client is attached.
   pub fn set_enhanced_user_interface(&mut self, enabled: bool) -> anyhow::Result<()> {
+    self.set_enhanced_user_interface_for(enabled, None)
+  }
+
+  pub fn set_enhanced_user_interface_for(&mut self, enabled: bool, pid: Option<i32>) -> anyhow::Result<()> {
     if !enabled {
       return Ok(());
     }
@@ -515,11 +519,15 @@ impl Desktop {
       );
       let system = OwnedCf(AXUIElementCreateSystemWide());
       AXUIElementSetMessagingTimeout(system.0, 0.05);
-      let app = focused_application(system.0).ok_or_else(|| anyhow::anyhow!("Cannot read focused application"))?;
+      let app = match pid {
+        Some(pid) => OwnedCf(AXUIElementCreateApplication(pid)),
+        None => focused_application(system.0).ok_or_else(|| anyhow::anyhow!("Cannot read focused application"))?,
+      };
       let mut pid = 0i32;
       anyhow::ensure!(AXUIElementGetPid(app.0, &mut pid) == 0, "Cannot read focused process");
-      if self.enhanced_user_interface_pids.insert(pid) {
-        set_bool_attribute(app.0, "AXEnhancedUserInterface", true);
+      if !self.enhanced_user_interface_pids.contains(&pid) && set_bool_attribute(app.0, "AXEnhancedUserInterface", true)
+      {
+        self.enhanced_user_interface_pids.insert(pid);
       }
     }
     Ok(())
@@ -545,37 +553,46 @@ impl Desktop {
     // Chromium/Electron can expose browser chrome before their web viewport is
     // hydrated. AXManualAccessibility requests that tree once per process; it
     // is narrower than enhanced UI/screen-reader emulation.
-    if (scan.skeletal() || scan.info.web_areas > 0 && scan.info.truncated)
-      && self.manual_accessibility_pids.insert(scan.pid)
-    {
-      unsafe { set_bool_attribute(scan.app.0, "AXManualAccessibility", true) };
-      std::thread::sleep(Duration::from_millis(120));
-      scan = discover_elements(Some(scan.pid))?;
+    if scan.skeletal() {
+      let enabled = bool_attribute(scan.app.0, "AXManualAccessibility") == Some(true)
+        || unsafe { set_bool_attribute(scan.app.0, "AXManualAccessibility", true) };
+      if enabled {
+        self.manual_accessibility_pids.insert(scan.pid);
+      } else {
+        self.manual_accessibility_pids.remove(&scan.pid);
+      }
+      // Electron may publish titlebar controls before asynchronously hydrating
+      // its useful tree. Prefer those semantic targets (for example Spotify's
+      // playback controls) before using pixel-derived OCR.
+      // Include discovery cost in the hydration deadline. A rejected enabling
+      // request must not incur sleeps on every activation of a native app.
+      let deadline = Instant::now() + Duration::from_millis(600);
+      while (enabled || self.enhanced_user_interface_pids.contains(&scan.pid))
+        && scan.skeletal()
+        && Instant::now() < deadline
+      {
+        std::thread::sleep(Duration::from_millis(50).min(deadline.saturating_duration_since(Instant::now())));
+        scan = discover_elements(Some(scan.pid))?;
+      }
     }
-    if scan.skeletal() && self.visual_fallback {
+    if needs_visual_fallback(self.visual_fallback, scan.skeletal(), scan.info.truncated) {
       let window = scan
         .info
         .window_bounds
         .ok_or_else(|| anyhow::anyhow!("visual fallback requires bounds for focused window"))?;
-      let visual_targets = visual_targets_after_warmup(window)?;
-      scan.targets.extend(visual_targets.into_iter().map(|target| Element {
-        node: None,
-        bounds: target.bounds,
-        score: 1,
-        depth: 0,
-        role: "VisualText".into(),
-        actions: vec![],
-        text: vec![],
-        source: TargetSource::Visual,
-      }));
+      match visual_targets_after_warmup(window) {
+        Ok(visual_targets) => merge_visual_targets(&mut scan.targets, visual_targets),
+        // A usable semantic tree must not become unavailable because optional
+        // Screen Recording access is denied.
+        Err(error) if !scan.skeletal() => {
+          tracing::debug!(%error, "Visual supplement unavailable; using accessibility targets")
+        }
+        Err(error) => return Err(error),
+      }
     }
     scan.info.manual_accessibility_enabled = self.manual_accessibility_pids.contains(&scan.pid);
-    // Never replace a coherent overlay with a time-bounded partial traversal.
-    // Hover effects and asynchronous browser trees commonly hit this path.
-    if scan.info.truncated && !self.elements.is_empty() {
-      self.last_scan = Some(scan.info);
-      return Ok(self.elements.iter().map(|target| target.bounds).collect());
-    }
+    // Always publish this scan's targets. The previous snapshot can belong to
+    // a different process/window and cannot safely fill a truncated scan.
     self.last_scan = Some(scan.info);
     self.elements = scan.targets;
     Ok(self.elements.iter().map(|target| target.bounds).collect())
@@ -611,6 +628,7 @@ impl Desktop {
         "manual_accessibility_enabled": scan.manual_accessibility_enabled,
         "web_searches": scan.web_searches,
         "web_search_results": scan.web_search_results,
+        "web_areas": scan.web_areas,
         "text": if show_text { "included" } else { "redacted" },
       })),
       "targets": self.elements.iter().map(|target| serde_json::json!({
@@ -625,6 +643,10 @@ impl Desktop {
       "target_count": self.elements.len(),
     }))
   }
+}
+
+fn needs_visual_fallback(enabled: bool, skeletal: bool, truncated: bool) -> bool {
+  enabled && skeletal && !truncated
 }
 
 /// Electron windows can report an accessible focused window before their first
@@ -649,6 +671,29 @@ fn visual_targets_after_warmup(window: Rect) -> anyhow::Result<Vec<visual::Visua
     }
   }
   Err(transient_error.unwrap_or_else(|| anyhow::anyhow!("visual fallback found no visible text")))
+}
+
+/// Adds OCR text only where Accessibility did not already provide a click
+/// target. This keeps semantic `AXPress` controls authoritative and prevents
+/// duplicate labels on button text, links, and menu items.
+fn merge_visual_targets(targets: &mut Vec<Element>, visual_targets: Vec<visual::VisualTarget>) {
+  for target in visual_targets {
+    let bounds = stable_bounds(target.bounds);
+    if targets.iter().any(|existing| covers(existing.bounds, bounds)) {
+      continue;
+    }
+    targets.push(Element {
+      node: None,
+      bounds,
+      score: 1,
+      depth: 0,
+      role: "VisualText".into(),
+      actions: vec![],
+      text: vec![],
+      source: TargetSource::Visual,
+    });
+  }
+  sort_targets(targets);
 }
 impl Drop for Desktop {
   fn drop(&mut self) {
@@ -951,14 +996,7 @@ fn record_rejection(reasons: &mut BTreeMap<&'static str, usize>, reason: &'stati
   *reasons.entry(reason).or_default() += 1;
 }
 
-const ACTIONABLE_ACTIONS: &[&str] = &[
-  "AXPress",
-  "AXConfirm",
-  "AXShowMenu",
-  "AXIncrement",
-  "AXDecrement",
-  "AXRaise",
-];
+const ACTIONABLE_ACTIONS: &[&str] = &["AXPress", "AXConfirm", "AXShowMenu", "AXIncrement", "AXDecrement"];
 
 fn actions(element: CFTypeRef) -> Vec<String> {
   use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex};
@@ -1045,7 +1083,14 @@ fn web_search_children(element: CFTypeRef, limit: usize) -> Vec<OwnedCf> {
 
 fn comparable_rect(a: Rect, b: Rect) -> bool {
   let intersection = clipped(a, b).map_or(0.0, |r| r.width * r.height);
-  intersection >= (a.width * a.height).min(b.width * b.height) * 0.95
+  intersection >= (a.width * a.height).max(b.width * b.height) * 0.95
+}
+
+/// A visual text box belongs to an accessibility target when nearly all of
+/// its pixels lie inside that target. OCR often finds only a button's caption.
+fn covers(target: Rect, visual: Rect) -> bool {
+  let overlap = clipped(target, visual).map_or(0.0, |rect| rect.width * rect.height);
+  overlap >= visual.width * visual.height * 0.9
 }
 
 fn has_supported_action(actions: &[String]) -> bool {
@@ -1143,7 +1188,7 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
       if matches!(role.as_str(), "AXScrollArea" | "AXWindow" | "AXSheet")
         && let Some(bounds) = read_rect(node.0)
       {
-        clip = clip.and_then(|parent| clipped(bounds, parent)).or(Some(bounds));
+        clip = clip.map_or(Some(bounds), |parent| clipped(bounds, parent));
         if clip.is_none() {
           record_rejection(&mut rejected, "outside-viewport");
           continue;
@@ -1387,13 +1432,41 @@ mod tests {
         height: 21.0,
       }
     );
+    assert!(covers(
+      Rect {
+        x: 10.0,
+        y: 10.0,
+        width: 100.0,
+        height: 40.0,
+      },
+      Rect {
+        x: 20.0,
+        y: 20.0,
+        width: 40.0,
+        height: 12.0,
+      }
+    ));
+    assert!(!covers(
+      Rect {
+        x: 10.0,
+        y: 10.0,
+        width: 20.0,
+        height: 20.0,
+      },
+      Rect {
+        x: 25.0,
+        y: 10.0,
+        width: 20.0,
+        height: 20.0,
+      }
+    ));
     assert!(comparable_rect(
       bounds,
       Rect {
-        x: 10.5,
-        y: 10.5,
-        width: 39.0,
-        height: 19.0,
+        x: 10.1,
+        y: 10.1,
+        width: 39.8,
+        height: 19.8,
       }
     ));
     assert!(!comparable_rect(
@@ -1412,6 +1485,34 @@ mod tests {
     assert!(matches_filter(&["  Play   Song ".into()], "AXButton", "play song"));
     assert!(matches_filter(&[], "AXCheckBox", "checkbox"));
     assert!(!matches_filter(&["Pause".into()], "AXButton", "play"));
+  }
+  #[test]
+  fn semantic_controls_bypass_ocr_even_when_visual_fallback_is_enabled() {
+    assert!(!needs_visual_fallback(true, false, false));
+    assert!(!needs_visual_fallback(true, false, true));
+    assert!(!needs_visual_fallback(true, true, true));
+    assert!(!needs_visual_fallback(false, true, false));
+    assert!(needs_visual_fallback(true, true, false));
+  }
+
+  #[test]
+  fn nested_clickable_controls_are_not_duplicates() {
+    let card = Rect {
+      x: 0.0,
+      y: 0.0,
+      width: 200.0,
+      height: 200.0,
+    };
+    let play = Rect {
+      x: 160.0,
+      y: 160.0,
+      width: 32.0,
+      height: 32.0,
+    };
+    assert!(!comparable_rect(card, play));
+    assert!(!comparable_rect(play, card));
+    assert!(comparable_rect(play, play));
+    assert!(!has_supported_action(&["AXRaise".into()]));
   }
   #[test]
   fn titlebar_only_detects_a_skeletal_app_tree() {
