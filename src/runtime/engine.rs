@@ -545,22 +545,9 @@ impl Runtime {
       }
     }
     if let Some(rect) = selected {
-      if self.mode == Some(NavigationMode::Elements) {
-        let current = self.desktop_mut()?.elements()?;
-        let current = if let Some(query) = self.element_filter.as_deref() {
-          self.desktop()?.matching_elements(query)
-        } else {
-          current
-        };
-        if !current.contains(&rect) {
-          self.navigation = Some(Navigation::from_rects(
-            &current,
-            &self.bindings.alphabet_for(&self.navigation_config.alphabet)?,
-          )?);
-          self.render()?;
-          bail!("targets changed; select a label from the refreshed overlay");
-        }
-      }
+      // Element refreshes are signal-driven. Re-scanning here reruns Vision
+      // OCR and can produce slightly different bounds for the same text,
+      // invalidating the label the user just selected.
       self
         .cursor
         .move_absolute(Vector2D::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0))?;
