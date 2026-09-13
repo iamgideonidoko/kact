@@ -355,4 +355,43 @@ mod tests {
       Command::Move { glide: false, .. }
     ));
   }
+
+  #[test]
+  fn command_limits_and_binding_only_actions_are_enforced() {
+    for command in [
+      Command::Move {
+        dx: 1_000_001.0,
+        dy: 0.0,
+        glide: false,
+      },
+      Command::MoveTo {
+        x: 0.0,
+        y: f64::INFINITY,
+        glide: false,
+      },
+      Command::Scroll { dx: 100_001, dy: 0 },
+      Command::Select { label: String::new() },
+      Command::Select { label: "x".repeat(65) },
+      Command::Select { label: "é".into() },
+      Command::Filter { query: " \t".into() },
+      Command::Filter { query: "x".repeat(257) },
+      Command::ButtonDown {
+        button: Button::Left,
+        modifiers: vec!["evil".into()],
+      },
+    ] {
+      assert!(command.validate().is_err(), "{command:?}");
+    }
+    for binding in [
+      "config check",
+      "service install",
+      "--config other.toml activate grid",
+      "--socket other.sock stop",
+      "--log-level debug stop",
+      "inspect elements",
+    ] {
+      assert!(Command::from_binding(binding).is_err(), "{binding}");
+    }
+    assert!(Command::from_binding("click --modifiers shift,cmd --count 3").is_ok());
+  }
 }
