@@ -25,6 +25,7 @@ use std::{
 struct OverlayData {
   targets: Vec<Target>,
   visual_bounds: Vec<Rect>,
+  refreshing: bool,
   prefix: String,
   appearance: Appearance,
   screen: Rect,
@@ -227,6 +228,20 @@ extern "C" fn draw(this: &Object, _: Sel, _: NSRect) {
       let _: () = msg_send![label, drawAtPoint: origin];
       let _: () = msg_send![label, release];
     }
+    if data.refreshing {
+      let text = string("Refreshing targets…");
+      let font: id = msg_send![class!(NSFont), boldSystemFontOfSize: a.font_size];
+      let attributes: id = msg_send![class!(NSDictionary), dictionaryWithObject: font forKey: string("NSFont")];
+      let label: id = msg_send![class!(NSAttributedString), alloc];
+      let label: id = msg_send![label, initWithString: text attributes: attributes];
+      let size: NSSize = msg_send![label, size];
+      let point = NSPoint::new(
+        (data.screen.width - size.width) / 2.0,
+        (data.screen.height - size.height) / 2.0,
+      );
+      let _: () = msg_send![label, drawAtPoint: point];
+      let _: () = msg_send![label, release];
+    }
   }
 }
 
@@ -354,6 +369,7 @@ impl Desktop {
         };
         data.prefix = prefix.to_owned();
         data.appearance = appearance.clone();
+        data.refreshing = appearance.refreshing;
         unsafe {
           let _: () = msg_send![view, setNeedsDisplay: YES];
         }
@@ -400,6 +416,7 @@ impl Desktop {
           } else {
             vec![]
           },
+          refreshing: appearance.refreshing,
           prefix: prefix.to_owned(),
           appearance: appearance.clone(),
           screen,
@@ -1272,7 +1289,7 @@ fn discover_elements(pid: Option<i32>) -> anyhow::Result<Discovery> {
         record_rejection(&mut rejected, "disabled");
       } else if let Some(bounds) = read_rect(node.0) {
         if let Some(bounds) = clip.map_or(Some(bounds), |visible| clipped(bounds, visible)) {
-          let text = ["AXTitle", "AXDescription", "AXValue", "AXHelp"]
+          let text = ["AXTitle", "AXDescription", "AXValue", "AXHelp", "AXIdentifier"]
             .into_iter()
             .filter_map(|name| string_attribute(node.0, name))
             .filter(|value| !value.trim().is_empty())

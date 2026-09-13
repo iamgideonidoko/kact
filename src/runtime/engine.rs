@@ -280,6 +280,7 @@ impl Runtime {
           grid_lines: a.grid_lines,
           label_position: a.label_position,
           visual_targets: self.mode == Some(NavigationMode::Elements),
+          refreshing: self.refresh_at.is_some(),
         };
         let mut targets = navigation.visible();
         if !self.labels_visible {

@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix="kact-elements-") as directory:
             value = target["text"]
             return " ".join(value) if isinstance(value, list) else value
 
-        visible_text = {text_value(target) for target in text_report["targets"]}
+        visible_text = {value for target in text_report["targets"] for value in target["text"]}
         assert "Document item 119" in visible_text, text_report
         assert "Document item 0" not in visible_text, text_report
         assert "Nested visible action" in visible_text, text_report
@@ -78,9 +78,9 @@ with tempfile.TemporaryDirectory(prefix="kact-elements-") as directory:
             assert fixture.poll() is None, "fixture exited before relayout"
         assert layout, "fixture never relaid out"
         moved = inspect(show_text=True)
-        moved_targets = {text_value(target): target for target in moved["targets"]}
-        assert "Primary action moved" in moved_targets, moved
-        assert moved_targets["Primary action moved"]["bounds"]["x"] > 150, moved
+        moved_target = next((target for target in moved["targets"] if "Primary action moved" in target["text"]), None)
+        assert moved_target, moved
+        assert moved_target["bounds"]["x"] > 150, moved
     finally:
         if fixture.poll() is None:
             fixture.terminate()

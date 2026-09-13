@@ -42,6 +42,7 @@ pub struct Appearance {
   pub grid_lines: bool,
   pub label_position: LabelPosition,
   pub visual_targets: bool,
+  pub refreshing: bool,
 }
 
 impl Default for Appearance {
@@ -55,6 +56,7 @@ impl Default for Appearance {
       grid_lines: true,
       label_position: LabelPosition::Center,
       visual_targets: false,
+      refreshing: false,
     }
   }
 }
