@@ -45,6 +45,8 @@ kact quit       # stops the daemon
 | --- | --- | --- |
 | Activate | `activate [grid\|elements\|freestyle]` | Start a mode; default is `freestyle`. |
 | Refresh | `refresh` | Rescan active element navigation. |
+| Filter elements | `filter QUERY` | Relabel active element targets matching accessible title, description, value, help text, or role. |
+| Next / previous target | `next` / `previous` | Move the cursor and selection through active element targets. |
 | Toggle | `toggle [grid\|elements\|freestyle]` | Activate the mode or deactivate an active mode. |
 | Deactivate | `deactivate` | Hide navigation and release held input. |
 | Cancel | `cancel` | Clear a label prefix or deactivate if empty. |
@@ -58,7 +60,7 @@ kact quit       # stops the daemon
 
 Coordinates must be finite and within ±1,000,000. A glide captures its start and target when received, reaches that target exactly, and never queues. A new pointer action, `move-start`, `stop`, deactivation, reload, or quit cancels it. Continuous commands require a running daemon and should be paired in order.
 
-`activate grid` shows labeled cells on every display. `activate elements` labels visible, enabled actionable accessibility targets in the focused macOS window and falls back to a grid when no targets are available. `refresh` rescans an active elements overlay. `activate freestyle` enables local movement controls without showing an overlay. `toggle MODE` deactivates any active mode, regardless of the requested mode.
+`activate grid` shows labeled cells on every display. `activate elements` labels visible, enabled actionable accessibility targets in the focused macOS window and falls back to a grid when no targets are available. `refresh`, `filter`, `next`, and `previous` require an active elements overlay. `refresh` rescans it; `filter` limits labels to matching accessibility metadata; `next` and `previous` cycle its targets. `activate freestyle` enables local movement controls without showing an overlay. `toggle MODE` deactivates any active mode, regardless of the requested mode.
 
 `inspect elements` reports action-aware element discovery diagnostics without printing accessible text. Use `inspect elements --pid PID` to inspect an application without focusing it first; `--show-text` includes accessible text only when it is safe to expose in terminal history. `--save-baseline FILE` writes source, role, and geometry only; `--diff-baseline FILE` reports added and removed targets from a later scan. An empty result or titlebar-only targets means the app did not expose usable Accessibility controls; element mode then falls back to grid.
 

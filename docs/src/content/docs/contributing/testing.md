@@ -28,3 +28,5 @@ mise exec rust@1.88.0 -- cargo install cargo-llvm-cov --locked
 Run all three smoke checks after changing overlays, accessibility, input capture, pointer injection, or runtime code that connects them. They require macOS desktop, Accessibility permission, and Xcode command-line tools. Fixture check is deterministic native coverage, not substitute for manual compatibility checks in browsers, Electron, app-provided virtualized lists, or canvas interfaces.
 
 CI builds and tests on macOS and Linux. It does not replace manual desktop verification of the X11 backend.
+
+The Docs workflow builds the site for documentation edits and changes to source, release scripts, build metadata, `README.md`, or Makefile commands. It catches site build regressions when a documented interface changes; review text accuracy with the interface change itself.

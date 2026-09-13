@@ -20,7 +20,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideo
 kact setup
 ```
 
-The command installs the latest release. To select a specific tag, use `bash -s -- --version vX.Y.Z` after the pipe. The installer selects the macOS Apple Silicon, macOS Intel, or Linux x86_64 archive, verifies its SHA-256 checksum before installing, and writes only to `~/.local/bin` by default. Current macOS releases are unsigned and unnotarized, so macOS may ask for confirmation before the first run. See the [installation guide](https://iamgideonidoko.github.io/kact/getting-started/installation/) for source builds, updates, and supported platforms.
+The command installs the latest release. To select a specific tag, use `bash -s -- --version vX.Y.Z` after the pipe. The installer selects the macOS Apple Silicon, macOS Intel, or Linux x86_64 archive, verifies its SHA-256 checksum before installing, writes the executable to `~/.local/bin` by default, and records its installation receipt under `~/.local/state/kact`. Current macOS releases are unsigned and unnotarized, so macOS may ask for confirmation before the first run. See the [installation guide](https://iamgideonidoko.github.io/kact/getting-started/installation/) for source builds, updates, and supported platforms.
 
 ## Build from source
 
@@ -54,6 +54,9 @@ Linux X11 builds need `libx11-dev` and `libxtst-dev`. Set `keybindings.navigatio
 kact activate grid         # labeled cells on every screen
 kact activate elements     # actionable, visible targets in focused window; grid fallback
 kact refresh               # rescan active element navigation
+kact filter "save"         # labels matching accessible title, description, value, help, or role
+kact next                   # focus next element target
+kact previous               # focus previous element target
 kact inspect elements      # focused app diagnostics; accessible text redacted
 kact inspect elements --pid 12345 # inspect background app without focusing it
 kact inspect elements --show-text # include accessible text (may be sensitive)
@@ -113,6 +116,7 @@ Normal typing is untouched while navigation is inactive. Explicit activation ena
 | Displayed label           | Jump to the target                        |
 | Escape / Cmd+. / Ctrl+G   | Clear prefix, then exit on the next press |
 | Backspace                 | Remove one prefix character               |
+| Tab / Shift+Tab           | Focus next / previous element target      |
 | Cmd+H                     | Hide navigation                           |
 | Arrows / Alt+arrows       | Move 10 / 100 points                      |
 | Cmd+arrows                | Jump to screen edges                      |
@@ -207,7 +211,6 @@ Automated tests cover config validation, movement timing, labels, state transiti
 - Add `kact config init` presets and generate starter integrations for supported remappers and shells.
 - Add window-relative moves and glides for focused-window centers, edges, corners, and fractional positions.
 - Add held scrolling with the same normal, precise, and fast speed modes as held pointer movement.
-- Add semantic filtering and target cycling for dense element overlays.
 - Extend `kact status` and `kact doctor` with permissions, enabled bindings, display details, and supported capabilities.
 - Improve Linux support through explicit, testable capabilities rather than a blanket platform claim.
   - Harden X11 behavior across desktop environments and window managers; report the active session, display, XTest, and available capabilities through `kact doctor`.
