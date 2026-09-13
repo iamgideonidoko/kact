@@ -1,6 +1,32 @@
-# Kact
+<div align="center">
+  <h1 align="center">
+    <a href="https://github.com/iamgideonidoko/kact">
+      <img src="docs/public/kact.svg" alt="Kact" width="160" height="160" />
+      <br />
+      Kact
+    </a>
+  </h1>
 
-Keyboard-driven cursor ACTuator. Written in Rust, with native macOS overlays and a local command service.
+  <p>
+    <a href="https://github.com/iamgideonidoko/kact/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/iamgideonidoko/kact?display_name=tag&style=for-the-badge" /></a>
+    <a href="https://github.com/iamgideonidoko/kact/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/iamgideonidoko/kact?style=for-the-badge" /></a>
+    <a href="https://github.com/iamgideonidoko/kact/actions/workflows/check.yml"><img alt="Checks" src="https://img.shields.io/github/actions/workflow/status/iamgideonidoko/kact/check.yml?branch=main&style=for-the-badge&label=checks" /></a>
+  </p>
+
+  <p><b>Keyboard-driven cursor ACTuator</b></p>
+
+  <p align="center">
+    <a href="https://iamgideonidoko.github.io/kact/getting-started/installation/">Installation</a> •
+    <a href="https://iamgideonidoko.github.io/kact/">Documentation</a> •
+    <a href="https://iamgideonidoko.github.io/kact/configuration/overview/">Configuration</a> •
+    <a href="https://iamgideonidoko.github.io/kact/reference/cli/">CLI</a> •
+    <a href="CONTRIBUTING.md">Contributing</a>
+  </p>
+
+  <hr />
+</div>
+
+Written in Rust, with native macOS overlays and a local command service.
 
 - Grid labels and accessibility element labels jump directly to targets.
 - Freestyle mode provides movement without an overlay.
@@ -9,7 +35,7 @@ Keyboard-driven cursor ACTuator. Written in Rust, with native macOS overlays and
 - TOML configuration with validation and automatic reload.
 - Global shortcuts are **disabled by default**. External shortcut tools can invoke every action through the CLI.
 
-macOS is the primary platform. Linux X11 supports shell-driven mouse actions; native overlays, element discovery, keyboard capture, and modified clicks are not available there. Native Wayland and Windows are unsupported.
+Current support: macOS provides native overlays, accessibility targeting, keyboard capture, and shell actions. Linux X11 provides shell-driven pointer actions. Wayland and Windows backends are not yet available.
 
 ## Install
 
@@ -30,7 +56,7 @@ Install the pinned Rust 1.88.0 toolchain:
 mise install
 cargo install --locked --path .
 kact setup
-kact activate grid
+kact status
 ```
 
 `kact setup` creates the default configuration, opens macOS Accessibility settings when needed, and starts the daemon. After granting permission, rerun `kact setup`. If keyboard capture is denied, check Input Monitoring too. `kact doctor` checks configuration, permission, and service availability without moving the cursor.

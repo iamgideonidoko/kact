@@ -9,13 +9,13 @@ description: Set up Kact and make your first pointer action.
    kact setup
    ```
 
-2. Activate the grid.
+2. On macOS, activate the grid.
 
    ```sh
    kact activate grid
    ```
 
-3. Type the labels shown on screen to place the cursor. Press <kbd>Enter</kbd> to click, or <kbd>Escape</kbd> to clear a partial label and press it again to cancel.
+3. On macOS, type the labels shown on screen to place the cursor. Press <kbd>Enter</kbd> to click, or <kbd>Escape</kbd> to clear a partial label and press it again to cancel.
 
 4. Inspect the daemon when needed:
 
@@ -29,7 +29,7 @@ description: Set up Kact and make your first pointer action.
    kact quit
    ```
 
-For a no-overlay shell workflow, use direct actions instead:
+On Linux X11, and for a no-overlay workflow on macOS, use direct actions:
 
 ```sh
 kact move --dx 20 --dy -10
@@ -44,4 +44,4 @@ kact move --dx 240 --dy 0 --glide
 
 `kact stop` only stops held movement and releases held mouse buttons. Use `kact deactivate` to hide an active overlay, and `kact quit` to stop the daemon.
 
-On X11, set `keybindings.navigation_enabled = false` before activating `freestyle`; this keeps Kact from attempting the macOS-only keyboard listener.
+On X11, do not activate navigation modes; bind shell actions from your window manager or remapper instead.
