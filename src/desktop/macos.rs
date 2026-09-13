@@ -47,6 +47,7 @@ pub struct Desktop {
   manual_accessibility_pids: HashSet<i32>,
   enhanced_user_interface_pids: HashSet<i32>,
   visual_fallback: bool,
+  semantic_snapshot: Option<VisualSnapshot>,
   visual_snapshot: Option<VisualSnapshot>,
   last_scan: Option<ScanInfo>,
   element_observer: Option<ElementObserver>,
@@ -284,6 +285,7 @@ impl Desktop {
         manual_accessibility_pids: HashSet::new(),
         enhanced_user_interface_pids: HashSet::new(),
         visual_fallback: false,
+        semantic_snapshot: None,
         visual_snapshot: None,
         last_scan: None,
         element_observer: None,
@@ -593,6 +595,19 @@ impl Desktop {
         std::thread::sleep(Duration::from_millis(50).min(deadline.saturating_duration_since(Instant::now())));
         scan = discover_elements(Some(scan.pid))?;
       }
+    }
+    if let Some(window) = scan.info.window_bounds {
+      let stable = stabilize_visual_targets(
+        &mut self.semantic_snapshot,
+        scan.pid,
+        stable_bounds(window),
+        scan.targets.iter().map(|target| target.bounds).collect(),
+      );
+      for (target, bounds) in scan.targets.iter_mut().zip(stable) {
+        target.bounds = bounds;
+      }
+    } else {
+      self.semantic_snapshot = None;
     }
     if needs_visual_fallback(self.visual_fallback, scan.skeletal(), scan.info.truncated) {
       let window = scan
