@@ -153,6 +153,13 @@ impl Runtime {
   }
 
   fn activate(&mut self, mode: NavigationMode) -> Result<()> {
+    if mode == NavigationMode::Elements
+      && self.mode == Some(NavigationMode::Elements)
+      && self.focus_token.is_some()
+      && self.desktop()?.focus_token().ok() == self.focus_token
+    {
+      return Ok(());
+    }
     if !platform::accessibility_trusted(true) {
       bail!("Enable Accessibility for Kact in System Settings > Privacy & Security, then retry");
     }

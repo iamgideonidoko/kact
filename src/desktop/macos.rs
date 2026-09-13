@@ -46,6 +46,7 @@ pub struct Desktop {
   manual_accessibility_pids: HashSet<i32>,
   enhanced_user_interface_pids: HashSet<i32>,
   visual_fallback: bool,
+  visual_snapshot: Option<VisualSnapshot>,
   last_scan: Option<ScanInfo>,
   element_observer: Option<ElementObserver>,
   element_dirty: Box<ElementDirty>,
@@ -268,6 +269,7 @@ impl Desktop {
         manual_accessibility_pids: HashSet::new(),
         enhanced_user_interface_pids: HashSet::new(),
         visual_fallback: false,
+        visual_snapshot: None,
         last_scan: None,
         element_observer: None,
         element_dirty: Box::new(ElementDirty(AtomicU64::new(0))),
@@ -581,7 +583,18 @@ impl Desktop {
         .window_bounds
         .ok_or_else(|| anyhow::anyhow!("visual fallback requires bounds for focused window"))?;
       match visual_targets_after_warmup(window) {
-        Ok(visual_targets) => merge_visual_targets(&mut scan.targets, visual_targets),
+        Ok(visual_targets) => {
+          let visual_targets = stabilize_visual_targets(
+            &mut self.visual_snapshot,
+            scan.pid,
+            stable_bounds(window),
+            visual_targets
+              .into_iter()
+              .map(|target| stable_bounds(target.bounds))
+              .collect(),
+          );
+          merge_visual_targets(&mut scan.targets, visual_targets);
+        }
         // A usable semantic tree must not become unavailable because optional
         // Screen Recording access is denied.
         Err(error) if !scan.skeletal() => {
@@ -589,6 +602,8 @@ impl Desktop {
         }
         Err(error) => return Err(error),
       }
+    } else {
+      self.visual_snapshot = None;
     }
     scan.info.manual_accessibility_enabled = self.manual_accessibility_pids.contains(&scan.pid);
     // Always publish this scan's targets. The previous snapshot can belong to
@@ -673,12 +688,64 @@ fn visual_targets_after_warmup(window: Rect) -> anyhow::Result<Vec<visual::Visua
   Err(transient_error.unwrap_or_else(|| anyhow::anyhow!("visual fallback found no visible text")))
 }
 
+/// Caches OCR geometry for one focused window. Vision can move or omit a text
+/// box between otherwise identical captures; only two matching changed scans
+/// replace the displayed snapshot.
+struct VisualSnapshot {
+  pid: i32,
+  window: Rect,
+  targets: Vec<Rect>,
+  pending: Option<Vec<Rect>>,
+}
+
+fn stabilize_visual_targets(
+  snapshot: &mut Option<VisualSnapshot>,
+  pid: i32,
+  window: Rect,
+  mut fresh: Vec<Rect>,
+) -> Vec<Rect> {
+  sort_rects(&mut fresh);
+  match snapshot {
+    Some(snapshot) if snapshot.pid == pid && snapshot.window == window => {
+      if visual_layout_matches(&snapshot.targets, &fresh) {
+        snapshot.pending = None;
+      } else if snapshot
+        .pending
+        .as_ref()
+        .is_some_and(|pending| visual_layout_matches(pending, &fresh))
+      {
+        snapshot.targets = fresh;
+        snapshot.pending = None;
+      } else {
+        snapshot.pending = Some(fresh);
+      }
+      snapshot.targets.clone()
+    }
+    _ => {
+      *snapshot = Some(VisualSnapshot {
+        pid,
+        window,
+        targets: fresh.clone(),
+        pending: None,
+      });
+      fresh
+    }
+  }
+}
+
+fn visual_layout_matches(previous: &[Rect], fresh: &[Rect]) -> bool {
+  previous.len() == fresh.len()
+    && previous.iter().zip(fresh).all(|(&previous, &fresh)| {
+      let overlap = clipped(previous, fresh).map_or(0.0, |rect| rect.width * rect.height);
+      overlap >= (previous.width * previous.height).max(fresh.width * fresh.height) * 0.8
+    })
+}
+
 /// Adds OCR text only where Accessibility did not already provide a click
 /// target. This keeps semantic `AXPress` controls authoritative and prevents
 /// duplicate labels on button text, links, and menu items.
-fn merge_visual_targets(targets: &mut Vec<Element>, visual_targets: Vec<visual::VisualTarget>) {
-  for target in visual_targets {
-    let bounds = stable_bounds(target.bounds);
+fn merge_visual_targets(targets: &mut Vec<Element>, visual_targets: Vec<Rect>) {
+  for bounds in visual_targets {
     if targets.iter().any(|existing| covers(existing.bounds, bounds)) {
       continue;
     }
@@ -1318,6 +1385,16 @@ fn sort_targets(targets: &mut [Element]) {
   });
 }
 
+fn sort_rects(rects: &mut [Rect]) {
+  rects.sort_by(|a, b| {
+    a.y
+      .total_cmp(&b.y)
+      .then_with(|| a.x.total_cmp(&b.x))
+      .then_with(|| a.height.total_cmp(&b.height))
+      .then_with(|| a.width.total_cmp(&b.width))
+  });
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1493,6 +1570,42 @@ mod tests {
     assert!(!needs_visual_fallback(true, true, true));
     assert!(!needs_visual_fallback(false, true, false));
     assert!(needs_visual_fallback(true, true, false));
+  }
+
+  #[test]
+  fn visual_snapshot_ignores_jitter_and_confirms_layout_changes() {
+    let window = Rect {
+      x: 0.0,
+      y: 0.0,
+      width: 400.0,
+      height: 300.0,
+    };
+    let initial = Rect {
+      x: 10.0,
+      y: 10.0,
+      width: 100.0,
+      height: 20.0,
+    };
+    let jittered = Rect { x: 12.0, ..initial };
+    let changed = Rect { x: 150.0, ..initial };
+    let mut snapshot = None;
+
+    assert_eq!(
+      stabilize_visual_targets(&mut snapshot, 42, window, vec![initial]),
+      vec![initial]
+    );
+    assert_eq!(
+      stabilize_visual_targets(&mut snapshot, 42, window, vec![jittered]),
+      vec![initial]
+    );
+    assert_eq!(
+      stabilize_visual_targets(&mut snapshot, 42, window, vec![changed]),
+      vec![initial]
+    );
+    assert_eq!(
+      stabilize_visual_targets(&mut snapshot, 42, window, vec![changed]),
+      vec![changed]
+    );
   }
 
   #[test]
