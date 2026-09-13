@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths: [docs/**, README.md, src/**, scripts/**, Cargo.toml, Makefile, rust-toolchain.toml, .mise.toml, .github/workflows/docs.yml]
   pull_request:
+    branches: [main]
     paths: [docs/**, README.md, src/**, scripts/**, Cargo.toml, Makefile, rust-toolchain.toml, .mise.toml, .github/workflows/docs.yml]
   workflow_dispatch:
 permissions:
