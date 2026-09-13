@@ -84,7 +84,10 @@ fn main() -> Result<()> {
           println!("{}", serde_json::to_string_pretty(&output)?);
         }
         #[cfg(not(target_os = "macos"))]
-        bail!("element inspection currently requires macOS");
+        {
+          let _ = (show_text, pid, save_baseline, diff_baseline);
+          bail!("element inspection currently requires macOS");
+        }
       }
     },
     Command::Service { command } => kact::service::configure(command, &absolute(&config_path)?, &absolute(&socket)?)?,
@@ -98,6 +101,7 @@ fn main() -> Result<()> {
   Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn inspection_baseline(report: &serde_json::Value) -> serde_json::Value {
   json!({
     "version": 1,
@@ -107,6 +111,7 @@ fn inspection_baseline(report: &serde_json::Value) -> serde_json::Value {
   })
 }
 
+#[cfg(target_os = "macos")]
 fn inspection_diff(saved: &serde_json::Value, current: &serde_json::Value) -> serde_json::Value {
   let targets = |report: &serde_json::Value| {
     report["targets"]
