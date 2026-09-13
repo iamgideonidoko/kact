@@ -158,5 +158,12 @@ mod tests {
     assert_eq!(navigation.cycle(false).unwrap().bounds, bounds[0]);
     assert_eq!(navigation.visible().iter().filter(|target| target.focused).count(), 1);
     assert_eq!(navigation.cycle(true).unwrap().bounds, bounds[1]);
+    assert_eq!(navigation.cycle(false).unwrap().bounds, bounds[0]);
+    assert_eq!(navigation.cycle(false).unwrap().bounds, bounds[1]);
+    assert_eq!(navigation.cycle(true).unwrap().bounds, bounds[0]);
+
+    let mut navigation = Navigation::from_rects(&bounds, "ab").unwrap();
+    assert_eq!(navigation.cycle(true).unwrap().bounds, bounds[1]);
+    assert!(Navigation::from_rects(&[], "ab").unwrap().cycle(false).is_none());
   }
 }

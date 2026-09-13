@@ -94,6 +94,9 @@ impl Desktop {
   pub fn matching_elements(&self, _: &str) -> Vec<Rect> {
     vec![]
   }
+  pub fn press_element(&self, _: Rect) -> bool {
+    false
+  }
   pub fn focus_token(&self) -> anyhow::Result<String> {
     anyhow::bail!("Focus tracking currently requires macOS")
   }
