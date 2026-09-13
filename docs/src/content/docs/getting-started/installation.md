@@ -3,7 +3,7 @@ title: Installation
 description: Install a verified GitHub Release or build Kact from source.
 ---
 
-Kact ships release archives through GitHub Releases. The installer downloads the matching archive, verifies its SHA-256 checksum, then installs only the `kact` executable.
+Kact ships release archives through GitHub Releases. The installer downloads the matching archive, verifies its SHA-256 checksum, installs the `kact` executable, and records an installation receipt for safe updates and uninstall.
 
 ## Requirements
 

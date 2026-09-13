@@ -92,6 +92,9 @@ pub struct InputOptions {
   pub label_keys: Vec<String>,
   pub labels_active: Arc<AtomicBool>,
   pub active: Arc<AtomicBool>,
+  /// Passive signal for pointer-wheel activity. The platform must never
+  /// suppress the wheel event; navigation only uses it to refresh geometry.
+  pub scroll_activity: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]

@@ -32,6 +32,8 @@ The daemon loads its configuration once at startup and watches it when `system.h
 
 The runtime uses the same command path for CLI requests and configured bindings. `src/core/` computes movement and label navigation without platform APIs. `src/platform/` injects pointer events and, on macOS, receives keyboard events. `src/desktop/` owns AppKit overlays and accessibility-element discovery on the macOS main thread.
 
+Element mode uses macOS Accessibility and refreshes after relevant layout changes. It falls back to grid when no usable targets exist. See [configuration](/kact/configuration/) for the optional OCR fallback and its privacy boundaries.
+
 The socket is local, bounded, and owned by the user. Its parent directory must be mode `0700`.
 
 The command socket is not a network API. Use the same `--socket PATH` for a custom daemon and every client that controls it. Passing `--config PATH` to an action command does not change the configuration of a daemon that is already running.

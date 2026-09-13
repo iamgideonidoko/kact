@@ -19,7 +19,7 @@ hero:
 
 import { CardGrid, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
 
-Kact is a keyboard-driven cursor ACTuator. Use its native macOS navigation overlays, or call commands from shells and keyboard remappers.
+Kact is a keyboard-driven cursor ACTuator. Current backends provide native macOS navigation overlays and Linux X11 shell actions; every supported platform can use the command-first interface.
 
 <div class="home-install">
 <Tabs>
@@ -28,7 +28,7 @@ Kact is a keyboard-driven cursor ACTuator. Use its native macOS navigation overl
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/iamgideonidoko/kact/main/scripts/install.sh | bash # latest release
 kact setup
-kact activate grid
+kact status
 ```
 
   </TabItem>
@@ -38,7 +38,7 @@ kact activate grid
 mise install
 cargo install --locked --path .
 kact setup
-kact activate grid
+kact status
 ```
 
   </TabItem>

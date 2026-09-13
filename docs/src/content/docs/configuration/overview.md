@@ -83,6 +83,24 @@ log_level = "info"     # error | warn | info | debug | trace | off
 
 `auto_click` clicks after a completed target selection. `rows`, `columns`, and `alphabet` control grid labels. `label_position` places labels inside their target; corner positions fall back to center for small targets. `[navigation.grid]`, `[navigation.elements]`, `[appearance.grid]`, and `[appearance.elements]` are optional sparse overrides: each omitted field inherits its global value. Appearance settings apply to macOS overlays. `target_fps` controls runtime polling while pointer motion is active. `[glide]` controls the duration and profile for opt-in one-shot cursor animation.
 
+For a browser with a confirmed incomplete accessibility tree, enable this compatibility option only for elements mode:
+
+```toml
+[navigation.elements]
+enhanced_user_interface = true
+```
+
+It is disabled by default because screen-reader emulation can change browser behavior and add overhead.
+
+For an app whose main UI is not exposed through Accessibility, opt into the separate OCR fallback:
+
+```toml
+[navigation.elements]
+visual_fallback = true
+```
+
+It requests Screen Recording permission when first needed and uses on-device Vision OCR within the focused-window bounds, only after a completed Accessibility scan lacks content controls. A usable Accessibility tree bypasses OCR entirely. Visual text regions covered by an existing target are removed; remaining visual targets use pointer clicks, never `AXPress`, and cannot identify icon-only buttons. Kact retains temporary visual geometry only for the focused window so OCR jitter does not relabel targets; a changed target set must match in two scans. Captures and recognized text are not persisted. `inspect elements` remains an Accessibility-only diagnostic and honors the enhanced accessibility setting for the specified PID. If permission is denied and no usable Accessibility tree exists, activation reports that error instead of silently falling back to grid.
+
 See the [configuration implementation](https://github.com/iamgideonidoko/kact/blob/main/src/config.rs) for validation rules.
 
 ## Motion and speed modes

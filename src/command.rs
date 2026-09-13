@@ -151,6 +151,14 @@ pub enum Command {
   Backspace,
   /// Subdivide the last selected grid cell
   Refine,
+  /// Rescan focused window accessibility targets
+  Refresh,
+  /// Label only accessibility targets matching title, description, value, help text, or role
+  Filter { query: String },
+  /// Focus next accessibility target
+  Next,
+  /// Focus previous accessibility target
+  Previous,
   /// Change overlay presentation for this session
   Show {
     #[arg(value_enum)]
@@ -160,6 +168,11 @@ pub enum Command {
   Reload,
   /// Check permissions and configuration without moving the cursor
   Doctor,
+  /// Inspect accessibility targets in the focused macOS window
+  Inspect {
+    #[command(subcommand)]
+    command: InspectCommand,
+  },
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +184,30 @@ pub enum ConfigCommand {
   Check,
   /// Print the resolved configuration path
   Path,
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InspectCommand {
+  /// Report element discovery diagnostics; text is redacted by default
+  Elements {
+    /// Include accessible titles, descriptions, values, and help text
+    #[arg(long)]
+    #[serde(default)]
+    show_text: bool,
+    /// Inspect this macOS process instead of the focused application
+    #[arg(long, value_parser = clap::value_parser!(i32).range(1..))]
+    #[serde(default)]
+    pid: Option<i32>,
+    /// Save a redacted target-geometry baseline; fails if the file exists
+    #[arg(long, conflicts_with = "diff_baseline")]
+    #[serde(default)]
+    save_baseline: Option<PathBuf>,
+    /// Compare current redacted target geometry with a saved baseline
+    #[arg(long, conflicts_with = "save_baseline")]
+    #[serde(default)]
+    diff_baseline: Option<PathBuf>,
+  },
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +267,7 @@ impl Command {
         | Self::Config { .. }
         | Self::Service { .. }
         | Self::Doctor
+        | Self::Inspect { .. }
     ) || cli.config.is_some()
       || cli.socket.is_some()
       || cli.log_level.is_some()
@@ -259,6 +297,9 @@ impl Command {
       Self::Select { label } if label.is_empty() || label.len() > 64 || !label.is_ascii() => {
         return Err("label must contain 1–64 ASCII characters".into());
       }
+      Self::Filter { query } if query.trim().is_empty() || query.len() > 256 => {
+        return Err("filter must contain 1–256 characters".into());
+      }
       _ => {}
     }
     Ok(())
@@ -286,6 +327,7 @@ mod tests {
     assert!(Command::from_binding("move --dx -20").is_ok());
     assert!(Command::from_binding("move-to --x 10 --y 20 --glide").is_ok());
     assert!(Command::from_binding("move-start left --speed fast").is_ok());
+    assert!(Command::from_binding("filter play").is_ok());
     assert!(Command::from_binding("setup").is_err());
     assert!(Command::from_binding("uninstall").is_err());
     assert!(Command::from_binding("daemon").is_err());

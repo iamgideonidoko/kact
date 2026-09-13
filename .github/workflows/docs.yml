@@ -2,9 +2,10 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths: [docs/**, .github/workflows/docs.yml]
+    paths: [docs/**, README.md, src/**, scripts/**, Cargo.toml, Makefile, rust-toolchain.toml, .mise.toml, .github/workflows/docs.yml]
   pull_request:
-    paths: [docs/**, .github/workflows/docs.yml]
+    branches: [main]
+    paths: [docs/**, README.md, src/**, scripts/**, Cargo.toml, Makefile, rust-toolchain.toml, .mise.toml, .github/workflows/docs.yml]
   workflow_dispatch:
 permissions:
   contents: read

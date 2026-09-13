@@ -64,3 +64,11 @@ description: Diagnose Kact configuration, permission, service, and platform fail
 **Cause:** Local bindings reserve characters from the label alphabet.
 
 **Fix:** Change the local binding or `navigation.alphabet`. At least two unreserved lowercase characters must remain.
+
+## Element mode falls back to grid
+
+**Cause:** Focused window exposes no visible, enabled actionable Accessibility targets. Custom canvas, video, game, and some Electron interfaces can have no usable Accessibility tree.
+
+**Check:** Keep app focused while activating element mode. To inspect another app without changing focus, run `kact inspect elements --pid "$(pgrep -x 'App Name')"`. Accessible text is redacted by default; add `--show-text` only when terminal history is safe to retain it.
+
+**Fix:** Grant Accessibility permission to Kact's launching application, then use `kact refresh` after scrolling or a UI change. If diagnostics show only titlebar controls or no targets, grid navigation remains expected fallback; use it for inaccessible surfaces.

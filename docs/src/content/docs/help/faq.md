@@ -5,7 +5,7 @@ description: Common questions about Kact platforms, input, and configuration.
 
 ## Does Kact support macOS?
 
-Yes. macOS is the primary platform and provides overlays, accessibility targeting, keyboard capture, and modified clicks.
+Yes. macOS currently provides overlays, accessibility targeting, keyboard capture, modified clicks, and shell actions.
 
 ## Does Kact support Linux?
 

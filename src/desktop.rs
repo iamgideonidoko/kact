@@ -17,7 +17,7 @@ pub enum LabelPosition {
   BottomRight,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Rect {
   pub x: f64,
   pub y: f64,
@@ -29,6 +29,7 @@ pub struct Rect {
 pub struct Target {
   pub label: String,
   pub bounds: Rect,
+  pub focused: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +41,8 @@ pub struct Appearance {
   pub opacity: f64,
   pub grid_lines: bool,
   pub label_position: LabelPosition,
+  pub visual_targets: bool,
+  pub refreshing: bool,
 }
 
 impl Default for Appearance {
@@ -52,6 +55,8 @@ impl Default for Appearance {
       opacity: 0.85,
       grid_lines: true,
       label_position: LabelPosition::Center,
+      visual_targets: false,
+      refreshing: false,
     }
   }
 }
@@ -74,6 +79,23 @@ impl Desktop {
   }
   pub fn elements(&self) -> anyhow::Result<Vec<Rect>> {
     anyhow::bail!("Accessibility targeting currently requires macOS")
+  }
+  pub fn set_enhanced_user_interface(&mut self, _: bool) -> anyhow::Result<()> {
+    anyhow::bail!("Accessibility targeting currently requires macOS")
+  }
+  pub fn set_visual_fallback(&mut self, _: bool) {}
+  pub fn observe_element_changes(&mut self) -> anyhow::Result<()> {
+    Ok(())
+  }
+  pub fn take_element_refresh_requested(&mut self) -> bool {
+    false
+  }
+  pub fn stop_observing_element_changes(&mut self) {}
+  pub fn matching_elements(&self, _: &str) -> Vec<Rect> {
+    vec![]
+  }
+  pub fn press_element(&self, _: Rect) -> bool {
+    false
   }
   pub fn focus_token(&self) -> anyhow::Result<String> {
     anyhow::bail!("Focus tracking currently requires macOS")

@@ -25,6 +25,7 @@ pub struct Runtime {
   listener: Option<Box<dyn InputListener>>,
   active: Arc<AtomicBool>,
   labels_active: Arc<AtomicBool>,
+  scroll_activity: Arc<AtomicBool>,
   mode: Option<NavigationMode>,
   navigation_config: NavigationConfig,
   appearance: AppearanceConfig,
@@ -40,6 +41,11 @@ pub struct Runtime {
   screen_layout: Vec<Rect>,
   focus_token: Option<String>,
   refresh_at: Option<Instant>,
+  element_generation: u64,
+  refresh_generation: Option<u64>,
+  next_element_poll: Option<Instant>,
+  element_poll_remaining: u8,
+  element_filter: Option<String>,
   cycle: usize,
   labels_visible: bool,
   pub quitting: bool,
@@ -68,6 +74,7 @@ impl Runtime {
       listener: None,
       active: Arc::new(AtomicBool::new(false)),
       labels_active: Arc::new(AtomicBool::new(false)),
+      scroll_activity: Arc::new(AtomicBool::new(false)),
       mode: None,
       navigation_config,
       appearance,
@@ -83,6 +90,11 @@ impl Runtime {
       screen_layout: vec![],
       focus_token: None,
       refresh_at: None,
+      element_generation: 0,
+      refresh_generation: None,
+      next_element_poll: None,
+      element_poll_remaining: 0,
+      element_filter: None,
       cycle: 0,
       labels_visible: true,
       quitting: false,
@@ -118,6 +130,7 @@ impl Runtime {
       },
       labels_active: Arc::clone(&self.labels_active),
       active: Arc::clone(&self.active),
+      scroll_activity: Arc::clone(&self.scroll_activity),
     };
     let mut listener = platform::create_input_listener(options)?;
     listener.start()?;
@@ -132,7 +145,21 @@ impl Runtime {
       .context("visual navigation currently requires macOS")
   }
 
+  fn desktop_mut(&mut self) -> Result<&mut Desktop> {
+    self
+      .desktop
+      .as_mut()
+      .context("visual navigation currently requires macOS")
+  }
+
   fn activate(&mut self, mode: NavigationMode) -> Result<()> {
+    if mode == NavigationMode::Elements
+      && self.mode == Some(NavigationMode::Elements)
+      && self.focus_token.is_some()
+      && self.desktop()?.focus_token().ok() == self.focus_token
+    {
+      return Ok(());
+    }
     if !platform::accessibility_trusted(true) {
       bail!("Enable Accessibility for Kact in System Settings > Privacy & Security, then retry");
     }
@@ -161,10 +188,22 @@ impl Runtime {
         &alphabet,
       )?),
       NavigationMode::Elements => {
-        let rectangles = self.desktop()?.elements().unwrap_or_else(|error| {
-          tracing::warn!(%error, "Element discovery unavailable; using grid");
-          vec![]
-        });
+        let enhanced_user_interface = self.config.navigation.enhanced_user_interface();
+        let visual_fallback = self.config.navigation.visual_fallback();
+        self
+          .desktop_mut()?
+          .set_enhanced_user_interface(enhanced_user_interface)?;
+        self.desktop_mut()?.set_visual_fallback(visual_fallback);
+        let rectangles = match self.desktop_mut()?.elements() {
+          Ok(rectangles) => rectangles,
+          // Visual fallback is explicitly requested. Permission/OCR failures
+          // must be actionable, never disguised as a grid fallback.
+          Err(error) if visual_fallback => return Err(error),
+          Err(error) => {
+            tracing::warn!(%error, "Element discovery unavailable; using grid");
+            vec![]
+          }
+        };
         if rectangles.is_empty() {
           actual_mode = NavigationMode::Grid;
           tracing::info!("No accessible targets; using grid navigation");
@@ -208,7 +247,14 @@ impl Runtime {
     } else {
       None
     };
+    if actual_mode == NavigationMode::Elements {
+      self.desktop_mut()?.observe_element_changes()?;
+    }
     self.refresh_at = None;
+    self.refresh_generation = None;
+    self.next_element_poll = None;
+    self.element_poll_remaining = 0;
+    self.element_filter = None;
     self.selected = None;
     self.state.active = true;
     self.labels_active.store(self.navigation.is_some(), Ordering::Release);
@@ -233,6 +279,8 @@ impl Runtime {
           opacity: a.opacity,
           grid_lines: a.grid_lines,
           label_position: a.label_position,
+          visual_targets: self.mode == Some(NavigationMode::Elements),
+          refreshing: self.refresh_at.is_some(),
         };
         let mut targets = navigation.visible();
         if !self.labels_visible {
@@ -274,9 +322,13 @@ impl Runtime {
     self.mode = None;
     self.focus_token = None;
     self.refresh_at = None;
+    self.refresh_generation = None;
+    self.next_element_poll = None;
+    self.element_poll_remaining = 0;
     self.navigation = None;
     self.selected = None;
     if let Some(desktop) = self.desktop.as_mut() {
+      desktop.stop_observing_element_changes();
       desktop.hide();
     }
     self.stop_motion()
@@ -403,12 +455,7 @@ impl Runtime {
       Command::Scroll { dx, dy } => {
         self.glide = None;
         self.cursor.scroll(dx, dy)?;
-        if self.mode == Some(NavigationMode::Elements) {
-          self.refresh_at = Some(Instant::now() + Duration::from_millis(180));
-          if let Some(desktop) = self.desktop.as_mut() {
-            desktop.hide();
-          }
-        }
+        self.mark_elements_dirty();
       }
       Command::Jump { target } => self.jump(target)?,
       Command::Select { label } => self.select(&label)?,
@@ -434,6 +481,15 @@ impl Runtime {
         self.selected = None;
         self.render()?;
       }
+      Command::Refresh => {
+        if self.mode != Some(NavigationMode::Elements) {
+          bail!("refresh requires element navigation");
+        }
+        self.refresh_elements()?;
+      }
+      Command::Filter { query } => self.filter_elements(&query)?,
+      Command::Next => self.cycle_element(false)?,
+      Command::Previous => self.cycle_element(true)?,
       Command::Show { setting } => {
         match setting {
           Presentation::GridLines => self.appearance.grid_lines = !self.appearance.grid_lines,
@@ -497,17 +553,9 @@ impl Runtime {
       }
     }
     if let Some(rect) = selected {
-      if self.mode == Some(NavigationMode::Elements) {
-        let current = self.desktop()?.elements()?;
-        if !current.contains(&rect) {
-          self.navigation = Some(Navigation::from_rects(
-            &current,
-            &self.bindings.alphabet_for(&self.navigation_config.alphabet)?,
-          )?);
-          self.render()?;
-          bail!("targets changed; select a label from the refreshed overlay");
-        }
-      }
+      // Element refreshes are signal-driven. Re-scanning here reruns Vision
+      // OCR and can produce slightly different bounds for the same text,
+      // invalidating the label the user just selected.
       self
         .cursor
         .move_absolute(Vector2D::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0))?;
@@ -515,15 +563,155 @@ impl Runtime {
       self.selected = Some(rect);
     }
     self.navigation = Some(navigation);
-    if selected.is_some() && self.navigation_config.auto_click {
-      self.execute(Command::Click {
-        button: Button::Left,
-        count: 1,
-        modifiers: vec![],
-      })?;
+    if let Some(bounds) = selected.filter(|_| self.navigation_config.auto_click) {
+      if self.mode == Some(NavigationMode::Elements) && self.desktop()?.press_element(bounds) {
+        self.deactivate()?;
+      } else {
+        self.execute(Command::Click {
+          button: Button::Left,
+          count: 1,
+          modifiers: vec![],
+        })?;
+      }
     } else {
       self.render()?;
     }
+    Ok(())
+  }
+
+  fn filter_elements(&mut self, query: &str) -> Result<()> {
+    if self.mode != Some(NavigationMode::Elements) {
+      bail!("filter requires element navigation");
+    }
+    if self.refresh_at.is_some() {
+      bail!("targets are refreshing");
+    }
+    let query = query.trim();
+    if query.is_empty() || query.len() > 256 {
+      bail!("filter must contain 1–256 characters");
+    }
+    let targets = self.desktop()?.matching_elements(query);
+    if targets.is_empty() {
+      bail!("no element targets match `{query}`");
+    }
+    self.navigation = Some(Navigation::from_rects(
+      &targets,
+      &self.bindings.alphabet_for(&self.navigation_config.alphabet)?,
+    )?);
+    self.element_filter = Some(query.to_owned());
+    self.selected = None;
+    self.render()
+  }
+
+  fn cycle_element(&mut self, backwards: bool) -> Result<()> {
+    if self.mode != Some(NavigationMode::Elements) {
+      bail!("target cycling requires element navigation");
+    }
+    if self.refresh_at.is_some() {
+      bail!("targets are refreshing");
+    }
+    let target = self
+      .navigation
+      .as_mut()
+      .context("no active target navigation")?
+      .cycle(backwards)
+      .context("no element targets available")?;
+    self.cursor.move_absolute(Vector2D::new(
+      target.bounds.x + target.bounds.width / 2.0,
+      target.bounds.y + target.bounds.height / 2.0,
+    ))?;
+    self.selected = Some(target.bounds);
+    self.render()
+  }
+
+  /// Marks the cached accessibility geometry unsafe to select. Repeated changes
+  /// coalesce into one scan after scrolling/layout activity settles.
+  fn mark_elements_dirty(&mut self) {
+    if self.mode != Some(NavigationMode::Elements) {
+      return;
+    }
+    self.element_generation = self.element_generation.wrapping_add(1);
+    self.refresh_generation = Some(self.element_generation);
+    self.refresh_at = Some(Instant::now() + Duration::from_millis(120));
+    self.next_element_poll = None;
+    self.selected = None;
+  }
+
+  /// Rebuilds target geometry without reactivating input or resetting mode state.
+  /// `expected_generation` prevents an obsolete deferred refresh from becoming actionable.
+  fn refresh_elements_for(&mut self, expected_generation: Option<u64>, schedule_probe: bool) -> Result<bool> {
+    if self.mode != Some(NavigationMode::Elements) {
+      bail!("refresh requires element navigation");
+    }
+    if expected_generation.is_some_and(|generation| self.refresh_generation != Some(generation)) {
+      return Ok(false);
+    }
+    let expected_token = self.focus_token.clone();
+    let all_targets = self.desktop_mut()?.elements()?;
+    // A notification received while AX was traversing makes this result stale.
+    // Leave labels non-actionable and coalesce a newer scan instead of applying it.
+    if self.desktop_mut()?.take_element_refresh_requested() {
+      self.mark_elements_dirty();
+      return Ok(false);
+    }
+    if self.desktop()?.focus_token().ok() != expected_token {
+      self.deactivate()?;
+      bail!("focused window changed during refresh; activate elements again");
+    }
+    let targets = if let Some(query) = self.element_filter.as_deref() {
+      self.desktop()?.matching_elements(query)
+    } else {
+      all_targets
+    };
+    if targets.is_empty() {
+      // Accessibility trees can be empty for a frame while an application is
+      // rebuilding after a scroll. Keep the current session non-actionable and
+      // retry instead of unexpectedly falling back to grid.
+      bail!("no accessible targets available yet");
+    }
+    let previous = self
+      .navigation
+      .as_ref()
+      .map(|navigation| {
+        navigation
+          .targets
+          .iter()
+          .map(|target| target.bounds)
+          .collect::<Vec<_>>()
+      })
+      .unwrap_or_default();
+    let changed = previous != targets;
+    if !changed {
+      self.refresh_at = None;
+      self.refresh_generation = None;
+      if schedule_probe {
+        self.element_poll_remaining = 2;
+        self.next_element_poll = Some(Instant::now() + Duration::from_millis(400));
+      }
+      return Ok(false);
+    }
+    let prefix = (!changed)
+      .then(|| self.navigation.as_ref().map(|navigation| navigation.prefix.clone()))
+      .flatten();
+    let mut navigation =
+      Navigation::from_rects(&targets, &self.bindings.alphabet_for(&self.navigation_config.alphabet)?)?;
+    if let Some(prefix) = prefix {
+      navigation.prefix = prefix;
+    }
+    self.selected = self.selected.filter(|selected| targets.contains(selected));
+    self.navigation = Some(navigation);
+    self.refresh_at = None;
+    self.refresh_generation = None;
+    if schedule_probe {
+      self.element_poll_remaining = 2;
+      self.next_element_poll = Some(Instant::now() + Duration::from_millis(400));
+    }
+    self.render()?;
+    Ok(changed)
+  }
+
+  fn refresh_elements(&mut self) -> Result<()> {
+    self.refresh_elements_for(None, false)?;
     Ok(())
   }
 
@@ -640,8 +828,14 @@ impl Runtime {
   }
 
   pub fn poll(&mut self) -> Result<()> {
+    let mut element_changed = false;
+    let scrolled = self.scroll_activity.swap(false, Ordering::AcqRel);
     if let Some(desktop) = self.desktop.as_mut() {
       desktop.pump();
+      element_changed = self.mode == Some(NavigationMode::Elements) && desktop.take_element_refresh_requested();
+    }
+    if element_changed || scrolled {
+      self.mark_elements_dirty();
     }
     for _ in 0..256 {
       let event = match self.listener.as_mut() {
@@ -662,8 +856,34 @@ impl Runtime {
       }
     }
     let now = Instant::now();
-    if self.refresh_at.is_some_and(|deadline| now >= deadline) {
-      self.activate(NavigationMode::Elements)?;
+    if let Some(deadline) = self.refresh_at.filter(|deadline| now >= *deadline) {
+      let generation = self.refresh_generation;
+      // A later input event can supersede this deadline; never apply its scan.
+      if let Err(error) = self.refresh_elements_for(generation, true) {
+        tracing::debug!(%error, "Element refresh failed");
+        if self.mode == Some(NavigationMode::Elements) && self.refresh_at == Some(deadline) {
+          self.refresh_at = Some(now + Duration::from_millis(250));
+        }
+      }
+    } else if self.mode == Some(NavigationMode::Elements)
+      && self.refresh_at.is_none()
+      && self.element_poll_remaining > 0
+      && self.next_element_poll.is_some_and(|deadline| now >= deadline)
+    {
+      // Some browsers publish layout after their first AX event. Confirm only
+      // twice, then stay idle until another real signal instead of rescanning
+      // and redrawing forever.
+      self.element_poll_remaining -= 1;
+      match self.refresh_elements_for(None, false) {
+        Ok(_) if self.refresh_at.is_none() && self.element_poll_remaining > 0 => {
+          self.next_element_poll = Some(now + Duration::from_millis(400));
+        }
+        Ok(_) => self.next_element_poll = None,
+        Err(error) => {
+          tracing::debug!(%error, "Element settle probe failed");
+          self.next_element_poll = (self.element_poll_remaining > 0).then(|| now + Duration::from_millis(400));
+        }
+      }
     }
     let frame = Duration::from_secs_f64(1.0 / self.config.motion.target_fps as f64);
     if now.duration_since(self.last_tick) >= frame {
@@ -809,6 +1029,7 @@ mod tests {
       listener: None,
       active: Arc::new(AtomicBool::new(false)),
       labels_active: Arc::new(AtomicBool::new(false)),
+      scroll_activity: Arc::new(AtomicBool::new(false)),
       mode: None,
       navigation_config,
       appearance,
@@ -824,6 +1045,11 @@ mod tests {
       screen_layout: vec![],
       focus_token: None,
       refresh_at: None,
+      element_generation: 0,
+      refresh_generation: None,
+      next_element_poll: None,
+      element_poll_remaining: 0,
+      element_filter: None,
       cycle: 0,
       labels_visible: true,
       quitting: false,
@@ -866,6 +1092,30 @@ mod tests {
     runtime.execute(Command::Cancel).unwrap();
     assert!(runtime.mode.is_none());
     assert!(!runtime.active.load(Ordering::Acquire));
+  }
+  #[test]
+  fn element_refresh_marks_labels_non_actionable_and_coalesces() {
+    let (mut runtime, _) = runtime();
+    grid(&mut runtime);
+    runtime.mode = Some(NavigationMode::Elements);
+    runtime.labels_active.store(true, Ordering::Release);
+    runtime.mark_elements_dirty();
+    let first = runtime.refresh_generation;
+    assert!(runtime.refresh_at.is_some());
+    assert!(runtime.labels_active.load(Ordering::Acquire));
+    assert!(runtime.execute(Command::Select { label: "a".into() }).is_err());
+    runtime.mark_elements_dirty();
+    assert_ne!(runtime.refresh_generation, first);
+  }
+  #[test]
+  fn obsolete_element_refresh_never_scans_or_reenables_labels() {
+    let (mut runtime, _) = runtime();
+    grid(&mut runtime);
+    runtime.mode = Some(NavigationMode::Elements);
+    runtime.refresh_generation = Some(2);
+    assert!(!runtime.refresh_elements_for(Some(1), false).unwrap());
+    assert_eq!(runtime.refresh_generation, Some(2));
+    assert!(!runtime.labels_active.load(Ordering::Acquire));
   }
   #[test]
   fn click_drops_drag_and_exits_without_an_extra_click() {

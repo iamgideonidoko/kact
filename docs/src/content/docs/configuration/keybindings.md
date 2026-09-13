@@ -12,6 +12,8 @@ Local controls are a macOS feature. They are only captured after `activate grid`
 | Cancel / deactivate | <kbd>Escape</kbd>, <kbd>Cmd</kbd>+<kbd>.</kbd>, <kbd>Ctrl</kbd>+<kbd>G</kbd> | First cancel clears a label prefix. |
 | Hide navigation | <kbd>Cmd</kbd>+<kbd>H</kbd> | Deactivates. |
 | Select label | Displayed label | Grid and elements modes. |
+| Refresh elements | Ctrl+R | Elements mode only. |
+| Focus next / previous element | Tab / Shift+Tab | Elements mode only. |
 | Backspace | <kbd>Backspace</kbd> | Removes one label character. |
 | Move | Arrow keys | 10 points. |
 | Move farther | <kbd>Alt</kbd> + arrows | 100 points. |
@@ -22,6 +24,9 @@ Local controls are a macOS feature. They are only captured after `activate grid`
 | Double click | <kbd>\</kbd> | |
 | Middle / right click | <kbd>[</kbd> / <kbd>]</kbd> | |
 | Modified click | modifiers + <kbd>Enter</kbd> | Any non-empty Ctrl/Alt/Shift/Cmd combination. |
+| Toggle grid lines / labels | Ctrl+= / Ctrl+Shift+= | |
+| Change grid density | Cmd+Shift+= / Cmd+Shift+- | Larger / smaller cells. |
+| Change contrast | Cmd+= / Cmd+- | |
 
 ## Presets
 

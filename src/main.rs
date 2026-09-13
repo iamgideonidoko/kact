@@ -1,9 +1,11 @@
 use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser};
-use kact::command::{Cli, Command, ConfigCommand};
+use kact::command::{Cli, Command, ConfigCommand, InspectCommand};
 use kact::config::Config;
 use kact::ipc::{self, Reply, Server};
 use kact::runtime::{ConfigWatcher, Runtime, bindings::Bindings};
+#[cfg(target_os = "macos")]
+use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -52,6 +54,43 @@ fn main() -> Result<()> {
         bail!("Enable Accessibility for Kact in System Settings > Privacy & Security");
       }
     }
+    Command::Inspect { command } => match command {
+      InspectCommand::Elements {
+        show_text,
+        pid,
+        save_baseline,
+        diff_baseline,
+      } => {
+        #[cfg(target_os = "macos")]
+        {
+          let mut desktop = kact::desktop::Desktop::new()?;
+          desktop.set_enhanced_user_interface_for(
+            kact::config::Config::load(&config_path)?
+              .navigation
+              .enhanced_user_interface(),
+            pid,
+          )?;
+          let report = desktop.inspect_elements(show_text, pid)?;
+          let baseline = inspection_baseline(&report);
+          if let Some(path) = save_baseline {
+            let mut file = OpenOptions::new().write(true).create_new(true).open(&path)?;
+            file.write_all(serde_json::to_string_pretty(&baseline)?.as_bytes())?;
+          }
+          let output = if let Some(path) = diff_baseline {
+            let saved = serde_json::from_slice(&std::fs::read(&path)?)?;
+            json!({ "report": report, "diff": inspection_diff(&saved, &baseline) })
+          } else {
+            report
+          };
+          println!("{}", serde_json::to_string_pretty(&output)?);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+          let _ = (show_text, pid, save_baseline, diff_baseline);
+          bail!("element inspection currently requires macOS");
+        }
+      }
+    },
     Command::Service { command } => kact::service::configure(command, &absolute(&config_path)?, &absolute(&socket)?)?,
     Command::Setup => setup(&cli, &config_path, &socket)?,
     Command::Uninstall { purge } => uninstall(&config_path, &socket, purge)?,
@@ -61,6 +100,34 @@ fn main() -> Result<()> {
     command => print_reply(ipc::send(&socket, &command)?)?,
   }
   Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn inspection_baseline(report: &serde_json::Value) -> serde_json::Value {
+  json!({
+    "version": 1,
+    "targets": report["targets"].as_array().into_iter().flatten().map(|target| json!({
+      "source": target["source"], "role": target["role"], "bounds": target["bounds"],
+    })).collect::<Vec<_>>(),
+  })
+}
+
+#[cfg(target_os = "macos")]
+fn inspection_diff(saved: &serde_json::Value, current: &serde_json::Value) -> serde_json::Value {
+  let targets = |report: &serde_json::Value| {
+    report["targets"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .map(|target| serde_json::to_string(target).expect("JSON target"))
+      .collect::<std::collections::BTreeSet<_>>()
+  };
+  let saved = targets(saved);
+  let current = targets(current);
+  json!({
+    "added": current.difference(&saved).filter_map(|target| serde_json::from_str::<serde_json::Value>(target).ok()).collect::<Vec<_>>(),
+    "removed": saved.difference(&current).filter_map(|target| serde_json::from_str::<serde_json::Value>(target).ok()).collect::<Vec<_>>(),
+  })
 }
 
 fn print_reply(reply: Reply) -> Result<()> {

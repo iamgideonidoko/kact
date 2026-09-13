@@ -7,6 +7,10 @@ description: macOS permissions and Linux X11 requirements.
 
 Kact uses Accessibility to inject pointer events and inspect accessible UI elements. Run `kact setup`: it requests permission and opens **System Settings → Privacy & Security → Accessibility** when required. Grant the application that actually runs Kact: your terminal for development, or the installed binary for a login service. Then run `kact setup` again.
 
+## Accessibility and visual surfaces
+
+Element navigation normally reads only macOS Accessibility metadata and never captures screen pixels. Interfaces with no usable accessibility controls fall back to grid navigation. `navigation.elements.visual_fallback = true` opts into Vision OCR and requires **Screen Recording** permission; see [configuration](/kact/configuration/) for its behavior and privacy boundaries.
+
 Native local and optional global keyboard bindings use the macOS event tap. If key capture is denied, grant Input Monitoring to Kact or the terminal that launched it.
 
 Check configuration, Accessibility, and daemon availability without moving the cursor:
