@@ -1641,6 +1641,46 @@ mod tests {
   }
 
   #[test]
+  fn mixed_semantic_and_visual_targets_keep_semantic_controls_authoritative() {
+    let semantic = Rect {
+      x: 10.0,
+      y: 10.0,
+      width: 100.0,
+      height: 30.0,
+    };
+    let mut targets = vec![Element {
+      node: None,
+      bounds: semantic,
+      score: 100,
+      depth: 1,
+      role: "AXButton".into(),
+      actions: vec!["AXPress".into()],
+      text: vec!["Play".into()],
+      source: TargetSource::Semantic,
+    }];
+    merge_visual_targets(
+      &mut targets,
+      vec![
+        Rect {
+          x: 30.0,
+          y: 18.0,
+          width: 40.0,
+          height: 12.0,
+        },
+        Rect {
+          x: 130.0,
+          y: 10.0,
+          width: 60.0,
+          height: 20.0,
+        },
+      ],
+    );
+    assert_eq!(targets.len(), 2);
+    assert_eq!(targets[0].role, "AXButton");
+    assert_eq!(targets[1].role, "VisualText");
+  }
+
+  #[test]
   fn nested_clickable_controls_are_not_duplicates() {
     let card = Rect {
       x: 0.0,
