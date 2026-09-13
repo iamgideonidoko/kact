@@ -4,6 +4,7 @@ use kact::command::{Cli, Command, ConfigCommand, InspectCommand};
 use kact::config::Config;
 use kact::ipc::{self, Reply, Server};
 use kact::runtime::{ConfigWatcher, Runtime, bindings::Bindings};
+#[cfg(target_os = "macos")]
 use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::Write;
