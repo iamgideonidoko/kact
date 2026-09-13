@@ -237,6 +237,7 @@ impl Drop for TemporaryDirectory {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::os::unix::fs::PermissionsExt;
 
   #[test]
   fn only_accepts_stable_versioned_release_metadata() {
@@ -254,6 +255,59 @@ mod tests {
   #[test]
   fn validates_sha256_values() {
     assert!(valid_sha256(&"a".repeat(64)));
+    assert!(valid_sha256(&"A1".repeat(32)));
     assert!(!valid_sha256("not-a-checksum"));
+  }
+
+  #[test]
+  fn tags_and_checksum_records_reject_ambiguous_input() {
+    for tag in ["v0.0.0", "v12.34.56+build.7", "v1.2.3-rc.1"] {
+      assert!(valid_tag(tag), "{tag}");
+    }
+    for tag in ["1.2.3", "v1.2", "v1.2.3/evil", "v1.2.3_evil", "v..1.2.3"] {
+      assert!(!valid_tag(tag), "{tag}");
+    }
+    let directory = std::env::temp_dir().join(format!("kact-update-test-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir(&directory).unwrap();
+    let archive = directory.join("kact.tar.gz");
+    let checksums = directory.join("SHA256SUMS");
+    fs::write(&archive, b"contents").unwrap();
+    fs::write(&checksums, format!("{}  other.tar.gz\n", "a".repeat(64))).unwrap();
+    assert!(verify_checksum(&archive, &checksums, "kact.tar.gz").is_err());
+    fs::write(&checksums, format!("{}  kact.tar.gz\n", "z".repeat(64))).unwrap();
+    assert!(verify_checksum(&archive, &checksums, "kact.tar.gz").is_err());
+    let mut command = if cfg!(target_os = "macos") {
+      let mut command = std::process::Command::new("shasum");
+      command.args(["-a", "256"]);
+      command
+    } else {
+      std::process::Command::new("sha256sum")
+    };
+    let checksum = command.arg(&archive).output().unwrap();
+    let checksum = String::from_utf8(checksum.stdout).unwrap();
+    fs::write(
+      &checksums,
+      format!("{}  kact.tar.gz\n", checksum.split_whitespace().next().unwrap()),
+    )
+    .unwrap();
+    assert!(verify_checksum(&archive, &checksums, "kact.tar.gz").is_ok());
+    let _ = fs::remove_dir_all(directory);
+  }
+
+  #[test]
+  fn replacement_is_atomic_and_keeps_executable_mode() {
+    let directory = std::env::temp_dir().join(format!("kact-replace-test-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir(&directory).unwrap();
+    let source = directory.join("source");
+    let destination = directory.join("kact");
+    fs::write(&source, b"new binary").unwrap();
+    fs::write(&destination, b"old binary").unwrap();
+    replace_binary(&destination, &source).unwrap();
+    assert_eq!(fs::read(&destination).unwrap(), b"new binary");
+    assert_eq!(fs::metadata(&destination).unwrap().permissions().mode() & 0o777, 0o755);
+    assert!(!temporary_path(&destination, "update").exists());
+    let _ = fs::remove_dir_all(directory);
   }
 }

@@ -52,3 +52,14 @@ fn commands_are_discoverable_and_missing_service_is_actionable() {
   assert!(!output.status.success());
   assert!(String::from_utf8(output.stderr).unwrap().contains("kact start"));
 }
+
+#[test]
+fn config_path_and_invalid_cli_input_have_stable_exit_statuses() {
+  let path = temporary().join("nested/kact.toml");
+  let output = run(&["--config", path.to_str().unwrap(), "config", "path"]);
+  assert!(output.status.success());
+  assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), path.to_str().unwrap());
+  let output = run(&["activate", "unknown-mode"]);
+  assert_eq!(output.status.code(), Some(2));
+  assert!(String::from_utf8(output.stderr).unwrap().contains("invalid value"));
+}

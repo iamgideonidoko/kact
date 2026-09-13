@@ -422,4 +422,32 @@ mod tests {
       crate::desktop::LabelPosition::TopLeft
     );
   }
+
+  #[test]
+  fn validation_rejects_every_numeric_boundary_and_invalid_binding() {
+    let invalid = |change: fn(&mut Config)| {
+      let mut config = Config::default();
+      change(&mut config);
+      assert!(config.validate().is_err());
+    };
+    invalid(|c| c.motion.max_speed = 0.0);
+    invalid(|c| c.motion.acceleration = 1.001);
+    invalid(|c| c.motion.friction = 1.0);
+    invalid(|c| c.motion.target_fps = 1001);
+    invalid(|c| c.glide.duration_ms = 15);
+    invalid(|c| c.modes.normal_multiplier = f64::NAN);
+    invalid(|c| c.modes.precise_multiplier = 0.009);
+    invalid(|c| c.modes.fast_multiplier = 10.001);
+    invalid(|c| c.navigation.rows = 101);
+    invalid(|c| c.navigation.columns = 0);
+    invalid(|c| c.appearance.font_size = 7.9);
+    invalid(|c| c.appearance.opacity = 1.01);
+    invalid(|c| c.system.log_level = "verbose".into());
+    invalid(|c| {
+      c.keybindings.global.insert(" ".into(), "stop".into());
+    });
+    invalid(|c| {
+      c.keybindings.local.insert("ctrl+x".into(), " ".into());
+    });
+  }
 }

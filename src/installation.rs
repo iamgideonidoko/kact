@@ -141,4 +141,22 @@ mod tests {
     fs::remove_file(receipt).unwrap();
     fs::remove_dir(dir).unwrap();
   }
+
+  #[test]
+  fn receipt_refuses_symlinks_and_insecure_permissions() {
+    let dir = std::env::temp_dir().join(format!("kact-installation-safe-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir(&dir).unwrap();
+    let target = dir.join("target");
+    let receipt = dir.join("receipt");
+    fs::write(&target, "path=/tmp/kact\ndevice=1\ninode=2\n").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &receipt).unwrap();
+    assert!(read_receipt(&receipt).is_err());
+    fs::remove_file(&receipt).unwrap();
+    fs::write(&receipt, "path=/tmp/kact\ndevice=1\ninode=2\n").unwrap();
+    fs::set_permissions(&receipt, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(read_receipt(&receipt).is_err());
+    let _ = fs::remove_dir_all(dir);
+  }
 }
