@@ -57,6 +57,8 @@ kact refresh               # rescan active element navigation
 kact inspect elements      # focused app diagnostics; accessible text redacted
 kact inspect elements --pid 12345 # inspect background app without focusing it
 kact inspect elements --show-text # include accessible text (may be sensitive)
+kact inspect elements --save-baseline elements.json # save redacted geometry
+kact inspect elements --diff-baseline elements.json # compare a later scan
 kact activate freestyle    # movement controls without an overlay
 kact toggle grid
 kact deactivate

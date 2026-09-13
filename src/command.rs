@@ -199,6 +199,14 @@ pub enum InspectCommand {
     #[arg(long, value_parser = clap::value_parser!(i32).range(1..))]
     #[serde(default)]
     pid: Option<i32>,
+    /// Save a redacted target-geometry baseline; fails if the file exists
+    #[arg(long, conflicts_with = "diff_baseline")]
+    #[serde(default)]
+    save_baseline: Option<PathBuf>,
+    /// Compare current redacted target geometry with a saved baseline
+    #[arg(long, conflicts_with = "save_baseline")]
+    #[serde(default)]
+    diff_baseline: Option<PathBuf>,
   },
 }
 

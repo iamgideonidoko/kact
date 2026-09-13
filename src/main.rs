@@ -4,6 +4,7 @@ use kact::command::{Cli, Command, ConfigCommand, InspectCommand};
 use kact::config::Config;
 use kact::ipc::{self, Reply, Server};
 use kact::runtime::{ConfigWatcher, Runtime, bindings::Bindings};
+use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -53,7 +54,12 @@ fn main() -> Result<()> {
       }
     }
     Command::Inspect { command } => match command {
-      InspectCommand::Elements { show_text, pid } => {
+      InspectCommand::Elements {
+        show_text,
+        pid,
+        save_baseline,
+        diff_baseline,
+      } => {
         #[cfg(target_os = "macos")]
         {
           let mut desktop = kact::desktop::Desktop::new()?;
@@ -63,10 +69,19 @@ fn main() -> Result<()> {
               .enhanced_user_interface(),
             pid,
           )?;
-          println!(
-            "{}",
-            serde_json::to_string_pretty(&desktop.inspect_elements(show_text, pid)?)?
-          );
+          let report = desktop.inspect_elements(show_text, pid)?;
+          let baseline = inspection_baseline(&report);
+          if let Some(path) = save_baseline {
+            let mut file = OpenOptions::new().write(true).create_new(true).open(&path)?;
+            file.write_all(serde_json::to_string_pretty(&baseline)?.as_bytes())?;
+          }
+          let output = if let Some(path) = diff_baseline {
+            let saved = serde_json::from_slice(&std::fs::read(&path)?)?;
+            json!({ "report": report, "diff": inspection_diff(&saved, &baseline) })
+          } else {
+            report
+          };
+          println!("{}", serde_json::to_string_pretty(&output)?);
         }
         #[cfg(not(target_os = "macos"))]
         bail!("element inspection currently requires macOS");
@@ -81,6 +96,32 @@ fn main() -> Result<()> {
     command => print_reply(ipc::send(&socket, &command)?)?,
   }
   Ok(())
+}
+
+fn inspection_baseline(report: &serde_json::Value) -> serde_json::Value {
+  json!({
+    "version": 1,
+    "targets": report["targets"].as_array().into_iter().flatten().map(|target| json!({
+      "source": target["source"], "role": target["role"], "bounds": target["bounds"],
+    })).collect::<Vec<_>>(),
+  })
+}
+
+fn inspection_diff(saved: &serde_json::Value, current: &serde_json::Value) -> serde_json::Value {
+  let targets = |report: &serde_json::Value| {
+    report["targets"]
+      .as_array()
+      .into_iter()
+      .flatten()
+      .map(|target| serde_json::to_string(target).expect("JSON target"))
+      .collect::<std::collections::BTreeSet<_>>()
+  };
+  let saved = targets(saved);
+  let current = targets(current);
+  json!({
+    "added": current.difference(&saved).filter_map(|target| serde_json::from_str::<serde_json::Value>(target).ok()).collect::<Vec<_>>(),
+    "removed": saved.difference(&current).filter_map(|target| serde_json::from_str::<serde_json::Value>(target).ok()).collect::<Vec<_>>(),
+  })
 }
 
 fn print_reply(reply: Reply) -> Result<()> {

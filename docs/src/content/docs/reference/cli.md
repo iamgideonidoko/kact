@@ -60,7 +60,7 @@ Coordinates must be finite and within ±1,000,000. A glide captures its start an
 
 `activate grid` shows labeled cells on every display. `activate elements` labels visible, enabled actionable accessibility targets in the focused macOS window and falls back to a grid when no targets are available. `refresh` rescans an active elements overlay. `activate freestyle` enables local movement controls without showing an overlay. `toggle MODE` deactivates any active mode, regardless of the requested mode.
 
-`inspect elements` reports action-aware element discovery diagnostics without printing accessible text. Use `inspect elements --pid PID` to inspect an application without focusing it first; `--show-text` includes accessible text only when it is safe to expose in terminal history. An empty result or titlebar-only targets means the app did not expose usable Accessibility controls; element mode then falls back to grid.
+`inspect elements` reports action-aware element discovery diagnostics without printing accessible text. Use `inspect elements --pid PID` to inspect an application without focusing it first; `--show-text` includes accessible text only when it is safe to expose in terminal history. `--save-baseline FILE` writes source, role, and geometry only; `--diff-baseline FILE` reports added and removed targets from a later scan. An empty result or titlebar-only targets means the app did not expose usable Accessibility controls; element mode then falls back to grid.
 
 ## Pointer and labels
 

@@ -6,6 +6,7 @@ All notable user-facing changes are recorded here.
 
 ### Added
 
+- `kact inspect elements --save-baseline FILE` writes redacted target geometry; `--diff-baseline FILE` reports later additions and removals.
 - `kact refresh` and privacy-safe `kact inspect elements` diagnostics (`--show-text` opts into accessible text).
 - `kact inspect elements --pid PID` inspects a target macOS app without changing focus.
 - `make smoke-elements` validates anonymous Accessibility structure against a deterministic native control fixture.
